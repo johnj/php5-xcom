@@ -84,7 +84,7 @@ static inline php_xcom* php_xcom_fetch_obj_store(zval *obj TSRMLS_DC) /* {{{ */
 }
 /* }}} */
 
-long php_xcom_send_msg(php_xcom *xcom, char *payload, char *topic, int debug) /* {{{ */
+long php_xcom_send_msg(php_xcom *xcom, char *payload, char *topic, char *schema_uri, int debug) /* {{{ */
 {
     CURL *curl;
     struct curl_slist *curl_headers = NULL;
@@ -103,8 +103,10 @@ long php_xcom_send_msg(php_xcom *xcom, char *payload, char *topic, int debug) /*
     }
 
     snprintf(auth_hdr, sizeof(auth_hdr), "Authorization: %s", xcom->cap_token);
-    snprintf(schema_uri_hdr, sizeof(schema_uri_hdr), "X-XC-SCHEMA-URI: %s", "http://jawed.name/xcomsocialcom/social.commerce.json");
-    snprintf(schema_ver_hdr, sizeof(schema_ver_hdr), "X-XC-SCHEMA-VERSION: %s", "1.0");
+    if(schema_uri) {
+        snprintf(schema_uri_hdr, sizeof(schema_uri_hdr), "X-XC-SCHEMA-URI: %s", schema_uri);
+    }
+    snprintf(schema_ver_hdr, sizeof(schema_ver_hdr), "X-XC-SCHEMA-VERSION: %s", "1.0.0");
 
     curl_headers = curl_slist_append(curl_headers, auth_hdr);
     curl_headers = curl_slist_append(curl_headers, schema_uri_hdr);
@@ -132,6 +134,7 @@ static char* php_xcom_avro_record_from_obj(zval *obj, char *json_schema, int sch
     HashTable *myht;
     char *msg_buf = NULL;
     avro_writer_t writer = NULL;
+    avro_value_t val;
     size_t writer_bytes = 0;
 
     avro_schema_t schema = NULL;
@@ -146,7 +149,6 @@ static char* php_xcom_avro_record_from_obj(zval *obj, char *json_schema, int sch
 
     avro_value_iface_t *iface = avro_generic_class_from_schema(schema);
 
-    avro_value_t val;
     avro_generic_value_new(iface, &val);
 
     myht = Z_OBJPROP_P(obj);
@@ -261,24 +263,23 @@ XCOM_METHOD(send) /* {{{ */
 {
     php_xcom *xcom;
     zval *obj, *data_obj, *debug;
-    char *topic, *json_schema;
-    size_t topic_len = 0, schema_len = 0;
+    char *topic, *json_schema, *schema_uri;
+    size_t topic_len = 0, schema_len = 0, schema_uri_len = 0;
     char *msg = NULL;
     long resp_code = -1;
 
-    if (zend_parse_method_parameters(ZEND_NUM_ARGS() TSRMLS_CC, getThis(), "OsOs", &obj, xcom_ce, &topic, &topic_len, &data_obj, zend_standard_class_def, &json_schema, &schema_len)==FAILURE) {
+    if (zend_parse_method_parameters(ZEND_NUM_ARGS() TSRMLS_CC, getThis(), "OsOs|s", &obj, xcom_ce, &topic, &topic_len, &data_obj, zend_standard_class_def,
+                &json_schema, &schema_len, &schema_uri, &schema_uri_len)==FAILURE) {
         return;
     }
 
     xcom = php_xcom_fetch_obj_store(obj TSRMLS_CC);
 
-    /*zend_print_zval_r(data_obj, 0 TSRMLS_CC);*/
-
     msg = php_xcom_avro_record_from_obj(data_obj, json_schema, schema_len TSRMLS_CC);
 
-    debug = zend_read_property(zend_standard_class_def, data_obj, "__debug", sizeof("__debug")-1, 1 TSRMLS_CC);
+    debug = zend_read_property(xcom_ce, obj, "__debug", sizeof("__debug")-1, 1 TSRMLS_CC);
 
-    resp_code = php_xcom_send_msg(xcom, msg, topic, debug ? Z_BVAL_P(debug) : 0);
+    resp_code = php_xcom_send_msg(xcom, msg, topic, schema_uri_len ? schema_uri : NULL, debug ? Z_BVAL_P(debug) : 0);
 
     RETVAL_LONG(resp_code);
 
