@@ -127,8 +127,78 @@ long php_xcom_send_msg(php_xcom *xcom, char *payload, char *topic, char *schema_
     curl_easy_cleanup(curl);
     return response_code;
 }
+/* }}} */
 
-static char* php_xcom_avro_record_from_obj(zval *obj, char *json_schema, int schema_len TSRMLS_DC) /* {{{ */
+void php_xcom_obj_from_avro_msg(zval **obj, char *msg, char *json_schema TSRMLS_DC) /* {{{ */
+{
+    avro_schema_t schema;
+    avro_schema_error_t error = NULL;
+    avro_value_iface_t *iface;
+    avro_value_t val;
+    size_t sz, i, vsz;
+
+    const char *av_s, av_b;
+    long av_l;
+    double av_d;
+
+    avro_reader_t reader = avro_reader_memory(msg, strlen(msg));
+
+    avro_schema_from_json(json_schema, strlen(json_schema), &schema, &error);
+
+    iface = avro_generic_class_from_schema(schema);
+
+    avro_generic_value_new(iface, &val);
+
+    avro_value_read(reader, &val);
+
+    avro_value_get_size(&val, &sz);
+
+    for(i=0; i<sz; ++i) {
+        avro_value_t field_val;
+        const char *field_name;
+        avro_value_get_by_index(&val, i, &field_val, &field_name);
+
+        switch(avro_value_get_type(&field_val)) {
+            case AVRO_STRING:
+                avro_value_get_string(&field_val, &av_s, &vsz);
+                zend_update_property_string(zend_standard_class_def, *obj, field_name, strlen(field_name), av_s TSRMLS_CC);
+            break;
+            case AVRO_NULL:
+                zend_update_property_null(zend_standard_class_def, *obj, field_name, strlen(field_name) TSRMLS_CC);
+            break;
+            case AVRO_BOOLEAN:
+                avro_value_get_boolean(&field_val, (int *)&av_b);
+                zend_update_property_bool(zend_standard_class_def, *obj, field_name, strlen(field_name), av_b TSRMLS_CC);
+            break;
+            case AVRO_INT64:
+                /* this cast is really bad on non-64bit archs */
+                avro_value_get_long(&field_val, (int64_t *)&av_l);
+                zend_update_property_long(zend_standard_class_def, *obj, field_name, strlen(field_name), av_l TSRMLS_CC);
+            break;
+            case AVRO_INT32:
+                avro_value_get_int(&field_val, (int *)&av_l);
+                zend_update_property_long(zend_standard_class_def, *obj, field_name, strlen(field_name), av_l TSRMLS_CC);
+            break;
+            case AVRO_FLOAT:
+                avro_value_get_float(&field_val, (float *)&av_d);
+                zend_update_property_double(zend_standard_class_def, *obj, field_name, strlen(field_name), av_d TSRMLS_CC);
+            break;
+            case AVRO_DOUBLE:
+                avro_value_get_double(&field_val, &av_d);
+                zend_update_property_double(zend_standard_class_def, *obj, field_name, strlen(field_name), av_d TSRMLS_CC);
+            break;
+            default:
+            break;
+        }
+    }
+    avro_value_decref(&val);
+    avro_value_iface_decref(iface);
+    avro_schema_decref(schema);
+    avro_reader_free(reader);
+    return;
+}
+
+static char* php_xcom_avro_record_from_obj(zval *obj, char *json_schema TSRMLS_DC) /* {{{ */
 {
     int i;
     HashTable *myht;
@@ -136,18 +206,18 @@ static char* php_xcom_avro_record_from_obj(zval *obj, char *json_schema, int sch
     avro_writer_t writer = NULL;
     avro_value_t val;
     size_t writer_bytes = 0;
-
     avro_schema_t schema = NULL;
     avro_schema_error_t error = NULL;
-    avro_schema_from_json(json_schema, strlen(json_schema),
-            &schema, &error);
+    avro_value_iface_t *iface;
+
+    avro_schema_from_json(json_schema, strlen(json_schema), &schema, &error);
 
     if(schema==NULL) {
       php_error_docref(NULL TSRMLS_CC, E_ERROR, "invalid schema: %s", avro_strerror());
       return NULL;
     }
 
-    avro_value_iface_t *iface = avro_generic_class_from_schema(schema);
+    iface = avro_generic_class_from_schema(schema);
 
     avro_generic_value_new(iface, &val);
 
@@ -275,7 +345,7 @@ XCOM_METHOD(send) /* {{{ */
 
     xcom = php_xcom_fetch_obj_store(obj TSRMLS_CC);
 
-    msg = php_xcom_avro_record_from_obj(data_obj, json_schema, schema_len TSRMLS_CC);
+    msg = php_xcom_avro_record_from_obj(data_obj, json_schema TSRMLS_CC);
 
     debug = zend_read_property(xcom_ce, obj, "__debug", sizeof("__debug")-1, 1 TSRMLS_CC);
 
@@ -285,6 +355,29 @@ XCOM_METHOD(send) /* {{{ */
 
     efree(msg);
 
+    return;
+}
+/* }}} */
+XCOM_METHOD(decode) /* {{{ */
+{
+    php_xcom *xcom;
+    zval *obj, *data_obj;
+    char *avro_msg, *json_schema;
+    size_t avro_msg_len = 0, schema_len = 0;
+
+    if (zend_parse_method_parameters(ZEND_NUM_ARGS() TSRMLS_CC, getThis(), "Oss", &obj, xcom_ce, &avro_msg, &avro_msg_len, &json_schema, &schema_len)==FAILURE) {
+        return;
+    }
+
+    xcom = php_xcom_fetch_obj_store(obj TSRMLS_CC);
+
+    object_init(data_obj);
+
+    php_xcom_obj_from_avro_msg(&data_obj, avro_msg, json_schema TSRMLS_CC);
+
+    RETURN_ZVAL(data_obj, 1, 0);
+
+    zval_ptr_dtor(&data_obj);
     return;
 }
 /* }}} */
@@ -322,12 +415,19 @@ ZEND_ARG_INFO(0, topic)
 ZEND_END_ARG_INFO()
 
 XCOM_ARGINFO
+ZEND_BEGIN_ARG_INFO_EX(arginfo_xcom_decode, 0, 0, 2)
+ZEND_ARG_INFO(0, msg)
+ZEND_ARG_INFO(0, schema)
+ZEND_END_ARG_INFO()
+
+XCOM_ARGINFO
 ZEND_BEGIN_ARG_INFO_EX(arginfo_xcom_noparams, 0, 0, 0)
 ZEND_END_ARG_INFO()
 
 static zend_function_entry xcom_methods[] = { /* {{{ */
 XCOM_ME(__construct,arginfo_xcom__construct,ZEND_ACC_PUBLIC|ZEND_ACC_CTOR)
 XCOM_ME(send,arginfo_xcom_send,ZEND_ACC_PUBLIC)
+XCOM_ME(decode,arginfo_xcom_decode,ZEND_ACC_PUBLIC)
 XCOM_ME(__destruct,arginfo_xcom_noparams,ZEND_ACC_PUBLIC)
 {NULL, NULL, NULL}
 };
