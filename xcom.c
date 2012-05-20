@@ -137,7 +137,7 @@ void php_xcom_obj_from_avro_msg(zval **obj, char *msg, char *json_schema TSRMLS_
     avro_value_t val;
     size_t sz, i, vsz;
 
-    const char *av_s, av_b;
+    char *av_s, av_b;
     int32_t av_d32;
     int64_t av_d64;
     double av_d;
@@ -157,12 +157,12 @@ void php_xcom_obj_from_avro_msg(zval **obj, char *msg, char *json_schema TSRMLS_
 
     for(i=0; i<sz; ++i) {
         avro_value_t field_val;
-        const char *field_name;
-        avro_value_get_by_index(&val, i, &field_val, &field_name);
+        char *field_name;
+        avro_value_get_by_index(&val, i, &field_val, (const char **)&field_name);
 
         switch(avro_value_get_type(&field_val)) {
             case AVRO_STRING:
-                avro_value_get_string(&field_val, &av_s, &vsz);
+                avro_value_get_string(&field_val, (const char **)&av_s, &vsz);
                 zend_update_property_string(zend_standard_class_def, *obj, field_name, strlen(field_name), av_s TSRMLS_CC);
             break;
             case AVRO_NULL:
