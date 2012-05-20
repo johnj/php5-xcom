@@ -138,8 +138,10 @@ void php_xcom_obj_from_avro_msg(zval **obj, char *msg, char *json_schema TSRMLS_
     size_t sz, i, vsz;
 
     const char *av_s, av_b;
-    long av_l;
+    int32_t av_d32;
+    int64_t av_d64;
     double av_d;
+    float av_f;
 
     avro_reader_t reader = avro_reader_memory(msg, strlen(msg));
 
@@ -171,17 +173,16 @@ void php_xcom_obj_from_avro_msg(zval **obj, char *msg, char *json_schema TSRMLS_
                 zend_update_property_bool(zend_standard_class_def, *obj, field_name, strlen(field_name), av_b TSRMLS_CC);
             break;
             case AVRO_INT64:
-                /* this cast is really bad on non-64bit archs */
-                avro_value_get_long(&field_val, (int64_t *)&av_l);
-                zend_update_property_long(zend_standard_class_def, *obj, field_name, strlen(field_name), av_l TSRMLS_CC);
+                avro_value_get_long(&field_val, &av_d64);
+                zend_update_property_long(zend_standard_class_def, *obj, field_name, strlen(field_name), av_d64 TSRMLS_CC);
             break;
             case AVRO_INT32:
-                avro_value_get_int(&field_val, (int *)&av_l);
-                zend_update_property_long(zend_standard_class_def, *obj, field_name, strlen(field_name), av_l TSRMLS_CC);
+                avro_value_get_int(&field_val, &av_d32);
+                zend_update_property_long(zend_standard_class_def, *obj, field_name, strlen(field_name), av_d32 TSRMLS_CC);
             break;
             case AVRO_FLOAT:
-                avro_value_get_float(&field_val, (float *)&av_d);
-                zend_update_property_double(zend_standard_class_def, *obj, field_name, strlen(field_name), av_d TSRMLS_CC);
+                avro_value_get_float(&field_val, &av_f);
+                zend_update_property_double(zend_standard_class_def, *obj, field_name, strlen(field_name), (double)av_f TSRMLS_CC);
             break;
             case AVRO_DOUBLE:
                 avro_value_get_double(&field_val, &av_d);
@@ -237,7 +238,7 @@ static char* php_xcom_avro_record_from_obj(zval *obj, char *json_schema TSRMLS_D
         ulong index;
         uint key_len;
         HashPosition pos;
-        HashTable *tmp_ht;
+        HashTable *tmp_ht = NULL;
 
         zend_hash_internal_pointer_reset_ex(myht, &pos);
         for (;; zend_hash_move_forward_ex(myht, &pos)) {
@@ -248,7 +249,7 @@ static char* php_xcom_avro_record_from_obj(zval *obj, char *json_schema TSRMLS_D
             avro_value_t field;
             avro_wrapped_buffer_t wbuf;
 
-            if (zend_hash_get_current_data_ex(myht, (void **) &data, &pos) == SUCCESS) {
+            if (zend_hash_get_current_data_ex(myht, (void *)&data, &pos) == SUCCESS) {
                 tmp_ht = HASH_OF(*data);
                 if (tmp_ht) {
                     tmp_ht->nApplyCount++;
