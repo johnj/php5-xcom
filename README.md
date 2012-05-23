@@ -44,3 +44,13 @@ $xcom->decode(file_get_contents("php://input"), '{"json": "schema"}');
 
 ?>
 ```
+Enable debug:
+```php
+<?php
+
+$xcom = new Xcom("http://api.sandbox.x.com/fabric/", "fabric_token",
+"capability_token");
+
+$xcom->__debug = true;
+
+?>
