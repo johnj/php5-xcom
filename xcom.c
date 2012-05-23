@@ -162,31 +162,37 @@ void php_xcom_obj_from_avro_msg(zval **obj, char *msg, char *json_schema TSRMLS_
 
         switch(avro_value_get_type(&field_val)) {
             case AVRO_STRING:
-                avro_value_get_string(&field_val, (const char **)&av_s, &vsz);
-                zend_update_property_string(zend_standard_class_def, *obj, field_name, strlen(field_name), av_s TSRMLS_CC);
+                if(!avro_value_get_string(&field_val, (const char **)&av_s, &vsz)) {
+                    zend_update_property_string(zend_standard_class_def, *obj, field_name, strlen(field_name), av_s TSRMLS_CC);
+                }
             break;
             case AVRO_NULL:
                 zend_update_property_null(zend_standard_class_def, *obj, field_name, strlen(field_name) TSRMLS_CC);
             break;
             case AVRO_BOOLEAN:
-                avro_value_get_boolean(&field_val, (int *)&av_b);
-                zend_update_property_bool(zend_standard_class_def, *obj, field_name, strlen(field_name), av_b TSRMLS_CC);
+                if(!avro_value_get_boolean(&field_val, (int *)&av_b)) {
+                    zend_update_property_bool(zend_standard_class_def, *obj, field_name, strlen(field_name), av_b TSRMLS_CC);
+                }
             break;
             case AVRO_INT64:
-                avro_value_get_long(&field_val, &av_d64);
-                zend_update_property_long(zend_standard_class_def, *obj, field_name, strlen(field_name), av_d64 TSRMLS_CC);
+                if(!avro_value_get_long(&field_val, &av_d64)) {
+                    zend_update_property_long(zend_standard_class_def, *obj, field_name, strlen(field_name), av_d64 TSRMLS_CC);
+                }
             break;
             case AVRO_INT32:
-                avro_value_get_int(&field_val, &av_d32);
-                zend_update_property_long(zend_standard_class_def, *obj, field_name, strlen(field_name), av_d32 TSRMLS_CC);
+                if(!avro_value_get_int(&field_val, &av_d32)) {
+                    zend_update_property_long(zend_standard_class_def, *obj, field_name, strlen(field_name), av_d32 TSRMLS_CC);
+                }
             break;
             case AVRO_FLOAT:
-                avro_value_get_float(&field_val, &av_f);
-                zend_update_property_double(zend_standard_class_def, *obj, field_name, strlen(field_name), (double)av_f TSRMLS_CC);
+                if(!avro_value_get_float(&field_val, &av_f)) {
+                    zend_update_property_double(zend_standard_class_def, *obj, field_name, strlen(field_name), (double)av_f TSRMLS_CC);
+                }
             break;
             case AVRO_DOUBLE:
-                avro_value_get_double(&field_val, &av_d);
-                zend_update_property_double(zend_standard_class_def, *obj, field_name, strlen(field_name), av_d TSRMLS_CC);
+                if(!avro_value_get_double(&field_val, &av_d)) {
+                    zend_update_property_double(zend_standard_class_def, *obj, field_name, strlen(field_name), av_d TSRMLS_CC);
+                }
             break;
             default:
             break;
@@ -372,6 +378,7 @@ XCOM_METHOD(decode) /* {{{ */
 
     xcom = php_xcom_fetch_obj_store(obj TSRMLS_CC);
 
+    MAKE_STD_ZVAL(data_obj);
     object_init(data_obj);
 
     php_xcom_obj_from_avro_msg(&data_obj, avro_msg, json_schema TSRMLS_CC);
