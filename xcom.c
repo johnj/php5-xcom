@@ -376,6 +376,10 @@ XCOM_METHOD(decode) /* {{{ */
         return;
     }
 
+    if(!schema_len) {
+        RETURN_FALSE;
+    }
+
     xcom = php_xcom_fetch_obj_store(obj TSRMLS_CC);
 
     MAKE_STD_ZVAL(data_obj);
