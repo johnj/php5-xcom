@@ -129,7 +129,7 @@ long php_xcom_send_msg(php_xcom *xcom, char *payload, char *topic, char *schema_
 }
 /* }}} */
 
-void php_xcom_obj_from_avro_msg(zval **obj, char *msg, char *json_schema TSRMLS_DC) /* {{{ */
+int php_xcom_obj_from_avro_msg(zval **obj, char *msg, char *json_schema TSRMLS_DC) /* {{{ */
 {
     avro_schema_t schema;
     avro_schema_error_t error = NULL;
@@ -147,7 +147,15 @@ void php_xcom_obj_from_avro_msg(zval **obj, char *msg, char *json_schema TSRMLS_
 
     avro_schema_from_json(json_schema, strlen(json_schema), &schema, &error);
 
+    if(!schema) {
+        return FALSE;
+    }
+
     iface = avro_generic_class_from_schema(schema);
+
+    if(!iface) {
+        return FALSE;
+    }
 
     avro_generic_value_new(iface, &val);
 
@@ -202,7 +210,7 @@ void php_xcom_obj_from_avro_msg(zval **obj, char *msg, char *json_schema TSRMLS_
     avro_value_iface_decref(iface);
     avro_schema_decref(schema);
     avro_reader_free(reader);
-    return;
+    return TRUE;
 }
 
 static char* php_xcom_avro_record_from_obj(zval *obj, char *json_schema TSRMLS_DC) /* {{{ */
@@ -376,16 +384,14 @@ XCOM_METHOD(decode) /* {{{ */
         return;
     }
 
-    if(!schema_len) {
-        RETURN_FALSE;
-    }
-
     xcom = php_xcom_fetch_obj_store(obj TSRMLS_CC);
 
     MAKE_STD_ZVAL(data_obj);
     object_init(data_obj);
 
-    php_xcom_obj_from_avro_msg(&data_obj, avro_msg, json_schema TSRMLS_CC);
+    if(!php_xcom_obj_from_avro_msg(&data_obj, avro_msg, json_schema TSRMLS_CC)) {
+        RETURN_FALSE;
+    }
 
     RETURN_ZVAL(data_obj, 1, 0);
 
