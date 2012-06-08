@@ -192,7 +192,7 @@ typedef char * zend_hash_key_type;
     }
 
 #define INIT_SMART_STR(a) \
-    (a).len = 0; \
+(a).len = 0; \
 (a).c = NULL;
 
 #define HTTP_IS_REDIRECT(http_response_code) \

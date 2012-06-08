@@ -84,6 +84,17 @@ static inline php_xcom* php_xcom_fetch_obj_store(zval *obj TSRMLS_DC) /* {{{ */
 }
 /* }}} */
 
+static size_t php_xcom_read_response(char *ptr, size_t size, size_t nmemb, void *ctx) /* {{{ */
+{
+    uint relsize;
+    php_xcom *xcom = (php_xcom *)ctx;
+
+    relsize = size * nmemb;
+    smart_str_appendl(&xcom->lastresponse, ptr, relsize);
+
+    return relsize;
+}
+
 long php_xcom_send_msg(php_xcom *xcom, char *payload, char *topic, char *schema_uri, int debug) /* {{{ */
 {
     CURL *curl;
@@ -108,6 +119,7 @@ long php_xcom_send_msg(php_xcom *xcom, char *payload, char *topic, char *schema_
     }
     snprintf(schema_ver_hdr, sizeof(schema_ver_hdr), "X-XC-SCHEMA-VERSION: %s", "1.0.0");
 
+    curl_headers = curl_slist_append(curl_headers, "Expect:");
     curl_headers = curl_slist_append(curl_headers, auth_hdr);
     curl_headers = curl_slist_append(curl_headers, schema_uri_hdr);
     curl_headers = curl_slist_append(curl_headers, schema_ver_hdr);
@@ -117,6 +129,8 @@ long php_xcom_send_msg(php_xcom *xcom, char *payload, char *topic, char *schema_
     curl_easy_setopt(curl, CURLOPT_URL, fab_url);
     curl_easy_setopt(curl, CURLOPT_POSTFIELDS, payload);
     curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, strlen(payload));
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, php_xcom_read_response);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, xcom);
     if(debug) {
         curl_easy_setopt(curl, CURLOPT_VERBOSE, 1);
     }
@@ -399,6 +413,25 @@ XCOM_METHOD(decode) /* {{{ */
     return;
 }
 /* }}} */
+
+/* {{{ */
+XCOM_METHOD(getLastResponse)
+{
+    php_xcom *xcom;
+    zval *obj;
+
+    if (zend_parse_method_parameters(ZEND_NUM_ARGS() TSRMLS_CC, getThis(), "O", &obj, xcom_ce)==FAILURE) {
+        return;
+    }
+
+    xcom = php_xcom_fetch_obj_store(obj TSRMLS_CC);
+
+    if (xcom->lastresponse.c) {
+        RETURN_STRINGL(xcom->lastresponse.c, xcom->lastresponse.len, 1);
+    }
+}
+/* }}} */
+
 XCOM_METHOD(__destruct) /* {{{ */
 {
     php_xcom *xcom;
@@ -446,6 +479,7 @@ static zend_function_entry xcom_methods[] = { /* {{{ */
 XCOM_ME(__construct,arginfo_xcom__construct,ZEND_ACC_PUBLIC|ZEND_ACC_CTOR)
 XCOM_ME(send,arginfo_xcom_send,ZEND_ACC_PUBLIC)
 XCOM_ME(decode,arginfo_xcom_decode,ZEND_ACC_PUBLIC)
+XCOM_ME(getLastResponse,arginfo_xcom_noparams,ZEND_ACC_PUBLIC)
 XCOM_ME(__destruct,arginfo_xcom_noparams,ZEND_ACC_PUBLIC)
 {NULL, NULL, NULL}
 };
@@ -489,6 +523,7 @@ static zend_object_value new_xcom_object(zend_class_entry *ce TSRMLS_DC) /* {{{ 
     php_xcom *xcom;
 
     xcom = php_xcom_new(ce TSRMLS_CC);
+    INIT_SMART_STR(xcom->lastresponse);
     return php_xcom_register_object(xcom TSRMLS_CC);
 }
 /* }}} */
