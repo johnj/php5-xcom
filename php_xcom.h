@@ -146,6 +146,7 @@ typedef struct {
     zend_object zo;
     HashTable *properties;
     smart_str lastresponse;
+    smart_str debug_output;
     smart_str headers_in;
     smart_str headers_out;
     uint sslcheck; /* whether we check for SSL verification or not */

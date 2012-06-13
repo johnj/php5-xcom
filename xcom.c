@@ -44,6 +44,9 @@ static void xcom_object_free_storage(void *obj TSRMLS_DC) /* {{{ */
     if (xcom->headers_out.c) {
         smart_str_free(&xcom->headers_out);
     }
+    if (xcom->debug_output.c) {
+        smart_str_free(&xcom->debug_output);
+    }
     efree(obj);
 }
 /* }}} */
@@ -93,6 +96,15 @@ static size_t php_xcom_read_response(char *ptr, size_t size, size_t nmemb, void 
     smart_str_appendl(&xcom->lastresponse, ptr, relsize);
 
     return relsize;
+}
+
+static int php_xcom_read_debug(CURL *ch, curl_infotype ign, char *debug, size_t len, void *ctx) /* {{{ */
+{
+    php_xcom *xcom = (php_xcom *)ctx;
+
+    smart_str_appendl(&xcom->debug_output, debug, len);
+
+    return 0;
 }
 
 long php_xcom_send_msg(php_xcom *xcom, char *payload, char *topic, char *schema_uri, int debug, HashTable *hdrs) /* {{{ */
@@ -190,6 +202,8 @@ long php_xcom_send_msg(php_xcom *xcom, char *payload, char *topic, char *schema_
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, xcom);
     if(debug) {
         curl_easy_setopt(curl, CURLOPT_VERBOSE, 1);
+        curl_easy_setopt(curl, CURLOPT_DEBUGFUNCTION, php_xcom_read_debug);
+        curl_easy_setopt(curl, CURLOPT_DEBUGDATA, xcom);
     }
 
     curl_easy_perform(curl);
@@ -473,6 +487,7 @@ XCOM_METHOD(send) /* {{{ */
     return;
 }
 /* }}} */
+
 XCOM_METHOD(decode) /* {{{ */
 {
     php_xcom *xcom;
@@ -500,8 +515,7 @@ XCOM_METHOD(decode) /* {{{ */
 }
 /* }}} */
 
-/* {{{ */
-XCOM_METHOD(getLastResponse)
+XCOM_METHOD(getLastResponse) /* {{{ */
 {
     php_xcom *xcom;
     zval *obj;
@@ -514,6 +528,23 @@ XCOM_METHOD(getLastResponse)
 
     if (xcom->lastresponse.c) {
         RETURN_STRINGL(xcom->lastresponse.c, xcom->lastresponse.len, 1);
+    }
+}
+/* }}} */
+
+XCOM_METHOD(getDebugOutput) /* {{{ */
+{
+    php_xcom *xcom;
+    zval *obj;
+
+    if (zend_parse_method_parameters(ZEND_NUM_ARGS() TSRMLS_CC, getThis(), "O", &obj, xcom_ce)==FAILURE) {
+        return;
+    }
+
+    xcom = php_xcom_fetch_obj_store(obj TSRMLS_CC);
+
+    if (xcom->debug_output.c) {
+        RETURN_STRINGL(xcom->debug_output.c, xcom->debug_output.len, 1);
     }
 }
 /* }}} */
@@ -567,6 +598,7 @@ XCOM_ME(send,arginfo_xcom_send,ZEND_ACC_PUBLIC)
 XCOM_ME(encode,arginfo_xcom_send,ZEND_ACC_PUBLIC)
 XCOM_ME(decode,arginfo_xcom_decode,ZEND_ACC_PUBLIC)
 XCOM_ME(getLastResponse,arginfo_xcom_noparams,ZEND_ACC_PUBLIC)
+XCOM_ME(getDebugOutput,arginfo_xcom_noparams,ZEND_ACC_PUBLIC)
 XCOM_ME(__destruct,arginfo_xcom_noparams,ZEND_ACC_PUBLIC)
 {NULL, NULL, NULL}
 };
@@ -611,6 +643,7 @@ static zend_object_value new_xcom_object(zend_class_entry *ce TSRMLS_DC) /* {{{ 
 
     xcom = php_xcom_new(ce TSRMLS_CC);
     INIT_SMART_STR(xcom->lastresponse);
+    INIT_SMART_STR(xcom->debug_output);
     return php_xcom_register_object(xcom TSRMLS_CC);
 }
 /* }}} */
