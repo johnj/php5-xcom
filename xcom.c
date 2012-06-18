@@ -101,6 +101,12 @@ static size_t php_xcom_read_response(char *ptr, size_t size, size_t nmemb, void 
 static int php_xcom_read_debug(CURL *ch, curl_infotype ign, char *debug, size_t len, void *ctx) /* {{{ */
 {
     php_xcom *xcom = (php_xcom *)ctx;
+    switch(ign) {
+        case CURLINFO_TEXT:
+        case CURLINFO_SSL_DATA_IN:
+        case CURLINFO_SSL_DATA_OUT:
+            return 0;
+    }
 
     smart_str_appendl(&xcom->debug_output, debug, len);
 
