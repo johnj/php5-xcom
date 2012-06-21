@@ -220,6 +220,15 @@ long php_xcom_send_msg(php_xcom *xcom, char *payload, char *topic, char *schema_
         curl_easy_setopt(curl, CURLOPT_VERBOSE, 1);
         curl_easy_setopt(curl, CURLOPT_DEBUGFUNCTION, php_xcom_read_debug);
         curl_easy_setopt(curl, CURLOPT_DEBUGDATA, xcom);
+        if (xcom->headers_in.c) {
+            smart_str_free(&xcom->headers_in);
+        }
+        if (xcom->headers_out.c) {
+            smart_str_free(&xcom->headers_out);
+        }
+        if (xcom->debug_output.c) {
+            smart_str_free(&xcom->debug_output);
+        }
     }
 
     curl_easy_perform(curl);
@@ -295,8 +304,12 @@ long php_xcom_send_msg(php_xcom *xcom, char *payload, char *topic, char *schema_
         CAAD("redirect_time", d_code);
     }
 
-    CAAS("headers_recv", xcom->headers_in.c);
-    CAAS("headers_sent", xcom->headers_out.c);
+    if(debug) {
+        smart_str_0(&xcom->headers_in);
+        smart_str_0(&xcom->headers_out);
+        CAAS("headers_recv", xcom->headers_in.c);
+        CAAS("headers_sent", xcom->headers_out.c);
+    }
 
     xcom->debugArr = info;
 
