@@ -1,0 +1,16 @@
+Package: php5-xcom
+Version: 1.0
+Section: web
+Priority: optional
+Architecture: all
+Essential: no
+Depends: 
+Pre-Depends: 
+Recommends: php5
+Suggests: 
+Installed-Size: 
+Maintainer: John Jawed [jawed@php.net]
+Conflicts: 
+Replaces: 
+Provides: php5-xcom
+Description: X.commerce C extension for PHP5.
