@@ -53,7 +53,7 @@ var_dump($xcom->decode(file_get_contents("php://input"), '{"json": "schema"}'));
  */
 ?>
 ```
-Enable debug:
+Debugging:
 ```php
 <?php
 
@@ -61,6 +61,9 @@ $xcom = new Xcom("http://api.sandbox.x.com/fabric/", "fabric_token",
 "capability_token");
 
 $xcom->__debug = true;
+
+$xcom->send($topic, $data, '{"json": "schema"}');
+var_dump($xcom->getDebugOutput());
 
 ?>
 ```
