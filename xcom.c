@@ -143,7 +143,7 @@ long php_xcom_send_msg(php_xcom *xcom, char *payload, char *topic, char *schema_
     }
 
     if(xcom->fabric_url) {
-        snprintf(fab_url, sizeof(fab_url), "%s%s", xcom->fabric_url, topic ? topic : "");
+        snprintf(fab_url, sizeof(fab_url), "%s/%s", xcom->fabric_url, topic ? topic : "");
     }
 
     snprintf(auth_hdr, sizeof(auth_hdr), "Authorization: %s", xcom->cap_token);
