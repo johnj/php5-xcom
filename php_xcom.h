@@ -19,6 +19,8 @@
 #include "win32/time.h"
 #endif
 
+#include <pthread.h>
+
 #include "SAPI.h"
 #include "zend_API.h"
 #include "zend_variables.h"
@@ -161,6 +163,19 @@ typedef struct {
     void ***thread_ctx;
 } php_xcom;
 
+typedef struct {
+    php_xcom *xcom;
+    char *payload;
+    char *schema_uri;
+    char *cap_token;
+    char *uri;
+    HashTable *hdrs;
+    long response_code;
+    int schema_uri_len;
+    int debug;
+    int async;
+} php_xcom_req_t;
+
 #if (PHP_MAJOR_VERSION >= 6)
 #define ZEND_HASH_KEY_STRVAL(key) key.s
 typedef zstr zend_hash_key_type;
@@ -262,6 +277,9 @@ smart_str_free(&(a)->curl_info);
 #if LIBCURL_VERSION_NUM >= 0x071304
 #define XCOM_PROTOCOLS_ALLOWED CURLPROTO_HTTP | CURLPROTO_HTTPS
 #endif
+
+static char* php_xcom_avro_record_from_obj(zval *obj, char *json_schema TSRMLS_DC);
+
 #endif
 
 /**

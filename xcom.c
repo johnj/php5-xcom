@@ -16,6 +16,8 @@ static zend_object_value php_xcom_clone_obj(zval *this_ptr TSRMLS_DC);
 static php_xcom* php_xcom_new(zend_class_entry *ce TSRMLS_DC);
 static zend_object_value php_xcom_register_object(php_xcom *xc TSRMLS_DC);
 
+pthread_attr_t pthread_attrs;
+
 static void xcom_object_free_storage(void *obj TSRMLS_DC) /* {{{ */
 {
     php_xcom *xcom;
@@ -122,12 +124,12 @@ static int php_xcom_read_debug(CURL *ch, curl_infotype ign, char *debug, size_t 
     }
 }
 
-long php_xcom_send_msg(php_xcom *xcom, char *payload, char *topic, char *schema_uri, int debug, HashTable *hdrs) /* {{{ */
+static void* php_xcom_send_msg(void *r) /* {{{ */
 {
     CURL *curl;
     struct curl_slist *curl_headers = NULL;
     long response_code = -1, l_code = 0;
-    char auth_hdr[4096] = "", fab_url[4096] = "", schema_ver_hdr[32] = "", schema_uri_hdr[1024] = "", *content_type, *s_code;
+    char auth_hdr[4096] = "", schema_ver_hdr[32] = "", schema_uri_hdr[1024] = "", *content_type, *s_code;
     zval **cur_val, *info;
     uint cur_key_len;
     ulong num_key;
@@ -135,20 +137,18 @@ long php_xcom_send_msg(php_xcom *xcom, char *payload, char *topic, char *schema_
     smart_str sheader = {0};
     char content_type_hdr[] = "Content-Type: avro/binary";
     double d_code;
+    php_xcom_req_t *req;
+
+    req = (php_xcom_req_t *)r;
     
     curl = curl_easy_init();
 
-    if(xcom->cap_token) {
-        snprintf(auth_hdr, sizeof(auth_hdr), "Authorization: %s", xcom->cap_token);
+    if(req->cap_token) {
+        snprintf(auth_hdr, sizeof(auth_hdr), "Authorization: %s", req->cap_token);
     }
 
-    if(xcom->fabric_url) {
-        snprintf(fab_url, sizeof(fab_url), "%s/%s", xcom->fabric_url, topic ? topic : "");
-    }
-
-    snprintf(auth_hdr, sizeof(auth_hdr), "Authorization: %s", xcom->cap_token);
-    if(schema_uri) {
-        snprintf(schema_uri_hdr, sizeof(schema_uri_hdr), "X-XC-SCHEMA-URI: %s", schema_uri);
+    if(req->schema_uri_len) {
+        snprintf(schema_uri_hdr, sizeof(schema_uri_hdr), "X-XC-SCHEMA-URI: %s", req->schema_uri);
     }
     snprintf(schema_ver_hdr, sizeof(schema_ver_hdr), "X-XC-SCHEMA-VERSION: %s", "1.0.0");
 
@@ -158,12 +158,12 @@ long php_xcom_send_msg(php_xcom *xcom, char *payload, char *topic, char *schema_
     curl_headers = curl_slist_append(curl_headers, schema_ver_hdr);
     curl_headers = curl_slist_append(curl_headers, content_type_hdr);
 
-    if(hdrs) {
-        for (zend_hash_internal_pointer_reset(hdrs);
-                zend_hash_get_current_data(hdrs, (void *)&cur_val) == SUCCESS;
-                zend_hash_move_forward(hdrs)) {
+    if(req->hdrs) {
+        for (zend_hash_internal_pointer_reset(req->hdrs);
+                zend_hash_get_current_data(req->hdrs, (void *)&cur_val) == SUCCESS;
+                zend_hash_move_forward(req->hdrs)) {
             /* check if a string based key is used */
-            switch (zend_hash_get_current_key_ex(hdrs, &cur_key, &cur_key_len, &num_key, 0, NULL)) {
+            switch (zend_hash_get_current_key_ex(req->hdrs, &cur_key, &cur_key_len, &num_key, 0, NULL)) {
 #if (PHP_MAJOR_VERSION >= 6)
                 case HASH_KEY_IS_UNICODE:
                     {
@@ -211,114 +211,126 @@ long php_xcom_send_msg(php_xcom *xcom, char *payload, char *topic, char *schema_
     }
 
     curl_easy_setopt(curl, CURLOPT_HTTPHEADER, curl_headers);
-    curl_easy_setopt(curl, CURLOPT_URL, fab_url);
-    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, payload);
-    curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, strlen(payload));
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, php_xcom_read_response);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, xcom);
-    if(debug) {
-        curl_easy_setopt(curl, CURLOPT_VERBOSE, 1);
-        curl_easy_setopt(curl, CURLOPT_DEBUGFUNCTION, php_xcom_read_debug);
-        curl_easy_setopt(curl, CURLOPT_DEBUGDATA, xcom);
-        if (xcom->headers_in.c) {
-            smart_str_free(&xcom->headers_in);
-        }
-        if (xcom->headers_out.c) {
-            smart_str_free(&xcom->headers_out);
-        }
-        if (xcom->debug_output.c) {
-            smart_str_free(&xcom->debug_output);
+    curl_easy_setopt(curl, CURLOPT_URL, req->uri);
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, req->payload);
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, strlen(req->payload));
+
+    if(!req->async) {
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, php_xcom_read_response);
+        curl_easy_setopt(curl, CURLOPT_WRITEDATA, req->xcom);
+        if(req->debug) {
+            curl_easy_setopt(curl, CURLOPT_VERBOSE, 1);
+            curl_easy_setopt(curl, CURLOPT_DEBUGFUNCTION, php_xcom_read_debug);
+            curl_easy_setopt(curl, CURLOPT_DEBUGDATA, req->xcom);
+            if (req->xcom->headers_in.c) {
+                smart_str_free(&req->xcom->headers_in);
+            }
+            if (req->xcom->headers_out.c) {
+                smart_str_free(&req->xcom->headers_out);
+            }
+            if (req->xcom->debug_output.c) {
+                smart_str_free(&req->xcom->debug_output);
+            }
         }
     }
 
     curl_easy_perform(curl);
 
-    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &response_code);
-    curl_easy_getinfo(curl, CURLINFO_CONTENT_TYPE, &content_type);
+    if(!req->async) {
+        curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &response_code);
+        curl_easy_getinfo(curl, CURLINFO_CONTENT_TYPE, &content_type);
 
-    ALLOC_INIT_ZVAL(info);
-    array_init(info);
+        ALLOC_INIT_ZVAL(info);
+        array_init(info);
 
-    if(content_type!=NULL) {
-        CAAS("content_type", content_type);
-    }
+        if(content_type!=NULL) {
+            CAAS("content_type", content_type);
+        }
 
-    CAAL("http_code", response_code);
+        CAAL("http_code", response_code);
 
-    if (content_type != NULL) {
-        CAAS("content_type", content_type);
-    }
-    if (curl_easy_getinfo(curl, CURLINFO_EFFECTIVE_URL, &s_code) == CURLE_OK) {
-        CAAS("url", s_code);
-    }
+        if (content_type != NULL) {
+            CAAS("content_type", content_type);
+        }
+        if (curl_easy_getinfo(curl, CURLINFO_EFFECTIVE_URL, &s_code) == CURLE_OK) {
+            CAAS("url", s_code);
+        }
 
-    if (curl_easy_getinfo(curl, CURLINFO_HEADER_SIZE, &l_code) == CURLE_OK) {
-        CAAL("header_size", l_code);
-    }
-    if (curl_easy_getinfo(curl, CURLINFO_REQUEST_SIZE, &l_code) == CURLE_OK) {
-        CAAL("request_size", l_code);
-    }
-    if (curl_easy_getinfo(curl, CURLINFO_FILETIME, &l_code) == CURLE_OK) {
-        CAAL("filetime", l_code);
-    }
-    if (curl_easy_getinfo(curl, CURLINFO_SSL_VERIFYRESULT, &l_code) == CURLE_OK) {
-        CAAL("ssl_verify_result", l_code);
-    }
-    if (curl_easy_getinfo(curl, CURLINFO_REDIRECT_COUNT, &l_code) == CURLE_OK) {
-        CAAL("redirect_count", l_code);
-    }
-    if (curl_easy_getinfo(curl, CURLINFO_TOTAL_TIME,&d_code) == CURLE_OK) {
-        CAAD("total_time", d_code);
-    }
-    if (curl_easy_getinfo(curl, CURLINFO_NAMELOOKUP_TIME, &d_code) == CURLE_OK) {
-        CAAD("namelookup_time", d_code);
-    }
-    if (curl_easy_getinfo(curl, CURLINFO_CONNECT_TIME, &d_code) == CURLE_OK) {
-        CAAD("connect_time", d_code);
-    }
-    if (curl_easy_getinfo(curl, CURLINFO_PRETRANSFER_TIME, &d_code) == CURLE_OK) {
-        CAAD("pretransfer_time", d_code);
-    }
-    if (curl_easy_getinfo(curl, CURLINFO_SIZE_UPLOAD, &d_code) == CURLE_OK){
-        CAAD("size_upload", d_code);
-    }
-    if (curl_easy_getinfo(curl, CURLINFO_SIZE_DOWNLOAD, &d_code) == CURLE_OK){
-        CAAD("size_download", d_code);
-    }
-    if (curl_easy_getinfo(curl, CURLINFO_SPEED_DOWNLOAD, &d_code) == CURLE_OK){
-        CAAD("speed_download", d_code);
-    }
-    if (curl_easy_getinfo(curl, CURLINFO_SPEED_UPLOAD, &d_code) == CURLE_OK){
-        CAAD("speed_upload", d_code);
-    }
-    if (curl_easy_getinfo(curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD, &d_code) == CURLE_OK) {
-        CAAD("download_content_length", d_code);
-    }
-    if (curl_easy_getinfo(curl, CURLINFO_CONTENT_LENGTH_UPLOAD, &d_code) == CURLE_OK) {
-        CAAD("upload_content_length", d_code);
-    }
-    if (curl_easy_getinfo(curl, CURLINFO_STARTTRANSFER_TIME, &d_code) == CURLE_OK){
-        CAAD("starttransfer_time", d_code);
-    }
-    if (curl_easy_getinfo(curl, CURLINFO_REDIRECT_TIME, &d_code) == CURLE_OK){
-        CAAD("redirect_time", d_code);
-    }
+        if (curl_easy_getinfo(curl, CURLINFO_HEADER_SIZE, &l_code) == CURLE_OK) {
+            CAAL("header_size", l_code);
+        }
+        if (curl_easy_getinfo(curl, CURLINFO_REQUEST_SIZE, &l_code) == CURLE_OK) {
+            CAAL("request_size", l_code);
+        }
+        if (curl_easy_getinfo(curl, CURLINFO_FILETIME, &l_code) == CURLE_OK) {
+            CAAL("filetime", l_code);
+        }
+        if (curl_easy_getinfo(curl, CURLINFO_SSL_VERIFYRESULT, &l_code) == CURLE_OK) {
+            CAAL("ssl_verify_result", l_code);
+        }
+        if (curl_easy_getinfo(curl, CURLINFO_REDIRECT_COUNT, &l_code) == CURLE_OK) {
+            CAAL("redirect_count", l_code);
+        }
+        if (curl_easy_getinfo(curl, CURLINFO_TOTAL_TIME,&d_code) == CURLE_OK) {
+            CAAD("total_time", d_code);
+        }
+        if (curl_easy_getinfo(curl, CURLINFO_NAMELOOKUP_TIME, &d_code) == CURLE_OK) {
+            CAAD("namelookup_time", d_code);
+        }
+        if (curl_easy_getinfo(curl, CURLINFO_CONNECT_TIME, &d_code) == CURLE_OK) {
+            CAAD("connect_time", d_code);
+        }
+        if (curl_easy_getinfo(curl, CURLINFO_PRETRANSFER_TIME, &d_code) == CURLE_OK) {
+            CAAD("pretransfer_time", d_code);
+        }
+        if (curl_easy_getinfo(curl, CURLINFO_SIZE_UPLOAD, &d_code) == CURLE_OK){
+            CAAD("size_upload", d_code);
+        }
+        if (curl_easy_getinfo(curl, CURLINFO_SIZE_DOWNLOAD, &d_code) == CURLE_OK){
+            CAAD("size_download", d_code);
+        }
+        if (curl_easy_getinfo(curl, CURLINFO_SPEED_DOWNLOAD, &d_code) == CURLE_OK){
+            CAAD("speed_download", d_code);
+        }
+        if (curl_easy_getinfo(curl, CURLINFO_SPEED_UPLOAD, &d_code) == CURLE_OK){
+            CAAD("speed_upload", d_code);
+        }
+        if (curl_easy_getinfo(curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD, &d_code) == CURLE_OK) {
+            CAAD("download_content_length", d_code);
+        }
+        if (curl_easy_getinfo(curl, CURLINFO_CONTENT_LENGTH_UPLOAD, &d_code) == CURLE_OK) {
+            CAAD("upload_content_length", d_code);
+        }
+        if (curl_easy_getinfo(curl, CURLINFO_STARTTRANSFER_TIME, &d_code) == CURLE_OK){
+            CAAD("starttransfer_time", d_code);
+        }
+        if (curl_easy_getinfo(curl, CURLINFO_REDIRECT_TIME, &d_code) == CURLE_OK){
+            CAAD("redirect_time", d_code);
+        }
 
-    if(debug) {
-        smart_str_0(&xcom->headers_in);
-        smart_str_0(&xcom->headers_out);
-        CAAS("headers_recv", xcom->headers_in.c);
-        CAAS("headers_sent", xcom->headers_out.c);
-    }
+        if(req->debug) {
+            smart_str_0(&req->xcom->headers_in);
+            smart_str_0(&req->xcom->headers_out);
+            CAAS("headers_recv", req->xcom->headers_in.c);
+            CAAS("headers_sent", req->xcom->headers_out.c);
+        }
 
-    xcom->debugArr = info;
+        req->xcom->debugArr = info;
+    }
 
     if (curl_headers) {
         curl_slist_free_all(curl_headers);
     }
 
     curl_easy_cleanup(curl);
-    return response_code;
+    req->response_code = response_code;
+    if(req->async) {
+        efree(req->cap_token);
+        efree(req->uri);
+        efree(req->schema_uri);
+        zend_hash_destroy(req->hdrs);
+    }
+    return NULL;
 }
 /* }}} */
 
@@ -404,6 +416,71 @@ int php_xcom_obj_from_avro_msg(zval **obj, char *msg, char *json_schema TSRMLS_D
     avro_schema_decref(schema);
     avro_reader_free(reader);
     return TRUE;
+}
+
+static void* php_xcom_send_msg_common(INTERNAL_FUNCTION_PARAMETERS, int async) {
+    php_xcom *xcom;
+    zval *obj, *data_obj, *debug, *hdrs = NULL, *tmp;
+    char *topic, *json_schema, *schema_uri;
+    size_t topic_len = 0, schema_len = 0, schema_uri_len = 0;
+    char *msg = NULL;
+    long resp_code = -1;
+    pthread_t thr;
+    php_xcom_req_t *req;
+    HashTable *h_hdrs;
+
+    if (zend_parse_method_parameters(ZEND_NUM_ARGS() TSRMLS_CC, getThis(), "OsOs|sa", &obj, xcom_ce, &topic, &topic_len, &data_obj, zend_standard_class_def,
+                &json_schema, &schema_len, &schema_uri, &schema_uri_len, &hdrs)==FAILURE) {
+        return NULL;
+    }
+
+    xcom = php_xcom_fetch_obj_store(obj TSRMLS_CC);
+
+    msg = php_xcom_avro_record_from_obj(data_obj, json_schema TSRMLS_CC);
+
+    debug = zend_read_property(xcom_ce, obj, "__debug", sizeof("__debug")-1, 1 TSRMLS_CC);
+
+    if(async) {
+        req = emalloc(sizeof(php_xcom_req_t));
+        req->async = 1;
+    } else {
+        req = do_alloca(sizeof(php_xcom_req_t));
+        req->async = 0;
+    }
+
+    spprintf(&req->uri, 0, "%s/%s", xcom->fabric_url, topic);
+    req->debug = debug ? Z_BVAL_P(debug) : 0;
+    req->schema_uri_len = schema_uri_len;
+
+    if(async) {
+        spprintf(&req->cap_token, 0, "%s", xcom->cap_token);
+        spprintf(&req->schema_uri, 0, "%s", schema_uri);
+        spprintf(&req->payload, 0, "%s", msg);
+        req->debug = debug ? Z_BVAL_P(debug) : 0;
+        if(hdrs) {
+            ALLOC_HASHTABLE(h_hdrs);
+            zend_hash_init(h_hdrs, 0, NULL, ZVAL_PTR_DTOR, 0);
+            zend_hash_copy(h_hdrs, (HASH_OF(hdrs)), (copy_ctor_func_t) zval_add_ref, (void *) &tmp, sizeof(zval *));
+            req->hdrs = h_hdrs;
+        }
+        pthread_create(&thr, &pthread_attrs, php_xcom_send_msg, (void*)req);
+        resp_code = 0L;
+    } else {
+        req->xcom = xcom;
+        req->cap_token = xcom->cap_token;
+        req->schema_uri = schema_uri;
+        req->payload = msg;
+        req->hdrs = hdrs ? HASH_OF(hdrs) : NULL;
+        php_xcom_send_msg(req);
+        resp_code = req->response_code;
+        efree(req->uri);
+    }
+
+    RETVAL_LONG(resp_code);
+
+    efree(msg);
+
+    return NULL;
 }
 
 static char* php_xcom_avro_record_from_obj(zval *obj, char *json_schema TSRMLS_DC) /* {{{ */
@@ -564,31 +641,13 @@ XCOM_METHOD(encode) /* {{{ */
 
 XCOM_METHOD(send) /* {{{ */
 {
-    php_xcom *xcom;
-    zval *obj, *data_obj, *debug, *hdrs = NULL;
-    char *topic, *json_schema, *schema_uri;
-    size_t topic_len = 0, schema_len = 0, schema_uri_len = 0;
-    char *msg = NULL;
-    long resp_code = -1;
+    php_xcom_send_msg_common(INTERNAL_FUNCTION_PARAM_PASSTHRU, 0);
+}
+/* }}} */
 
-    if (zend_parse_method_parameters(ZEND_NUM_ARGS() TSRMLS_CC, getThis(), "OsOs|sa", &obj, xcom_ce, &topic, &topic_len, &data_obj, zend_standard_class_def,
-                &json_schema, &schema_len, &schema_uri, &schema_uri_len, &hdrs)==FAILURE) {
-        return;
-    }
-
-    xcom = php_xcom_fetch_obj_store(obj TSRMLS_CC);
-
-    msg = php_xcom_avro_record_from_obj(data_obj, json_schema TSRMLS_CC);
-
-    debug = zend_read_property(xcom_ce, obj, "__debug", sizeof("__debug")-1, 1 TSRMLS_CC);
-
-    resp_code = php_xcom_send_msg(xcom, msg, topic, schema_uri_len ? schema_uri : NULL, debug ? Z_BVAL_P(debug) : 0, hdrs ? HASH_OF(hdrs) : NULL);
-
-    RETVAL_LONG(resp_code);
-
-    efree(msg);
-
-    return;
+XCOM_METHOD(sendAsync) /* {{{ */
+{
+    php_xcom_send_msg_common(INTERNAL_FUNCTION_PARAM_PASSTHRU, 1);
 }
 /* }}} */
 
@@ -718,6 +777,7 @@ ZEND_END_ARG_INFO()
 static zend_function_entry xcom_methods[] = { /* {{{ */
 XCOM_ME(__construct,arginfo_xcom__construct,ZEND_ACC_PUBLIC|ZEND_ACC_CTOR)
 XCOM_ME(send,arginfo_xcom_send,ZEND_ACC_PUBLIC)
+XCOM_ME(sendAsync,arginfo_xcom_send,ZEND_ACC_PUBLIC)
 XCOM_ME(encode,arginfo_xcom_send,ZEND_ACC_PUBLIC)
 XCOM_ME(decode,arginfo_xcom_decode,ZEND_ACC_PUBLIC)
 XCOM_ME(getLastResponse,arginfo_xcom_noparams,ZEND_ACC_PUBLIC)

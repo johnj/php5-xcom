@@ -10,6 +10,7 @@ if test "$PHP_XCOM" != "no"; then
 
   PHP_ADD_LIBRARY(curl,,XCOM_SHARED_LIBADD)
   PHP_ADD_LIBRARY(avro,,XCOM_SHARED_LIBADD)
+  PHP_ADD_LIBRARY(pthread,,XCOM_SHARED_LIBADD)
 
   PHP_NEW_EXTENSION(xcom, xcom.c, $ext_shared)
   CFLAGS="$CFLAGS -Wall -g"
