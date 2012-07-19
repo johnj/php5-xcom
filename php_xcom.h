@@ -166,12 +166,9 @@ typedef struct {
 typedef struct {
     php_xcom *xcom;
     char *payload;
-    char *schema_uri;
-    char *cap_token;
-    char *uri;
-    HashTable *hdrs;
+    struct curl_slist *curl_headers;
+    char uri[2048];
     long response_code;
-    int schema_uri_len;
     int debug;
     int async;
 } php_xcom_req_t;

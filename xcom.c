@@ -127,90 +127,17 @@ static int php_xcom_read_debug(CURL *ch, curl_infotype ign, char *debug, size_t 
 static void* php_xcom_send_msg(void *r) /* {{{ */
 {
     CURL *curl;
-    struct curl_slist *curl_headers = NULL;
     long response_code = -1, l_code = 0;
-    char auth_hdr[4096] = "", schema_ver_hdr[32] = "", schema_uri_hdr[1024] = "", *content_type, *s_code;
-    zval **cur_val, *info;
-    uint cur_key_len;
-    ulong num_key;
-    zend_hash_key_type cur_key;
-    smart_str sheader = {0};
-    char content_type_hdr[] = "Content-Type: avro/binary";
+    char *content_type, *s_code;
     double d_code;
     php_xcom_req_t *req;
+    zval *info;
 
     req = (php_xcom_req_t *)r;
     
     curl = curl_easy_init();
 
-    if(req->cap_token) {
-        snprintf(auth_hdr, sizeof(auth_hdr), "Authorization: %s", req->cap_token);
-    }
-
-    if(req->schema_uri_len) {
-        snprintf(schema_uri_hdr, sizeof(schema_uri_hdr), "X-XC-SCHEMA-URI: %s", req->schema_uri);
-    }
-    snprintf(schema_ver_hdr, sizeof(schema_ver_hdr), "X-XC-SCHEMA-VERSION: %s", "1.0.0");
-
-    curl_headers = curl_slist_append(curl_headers, "Expect:");
-    curl_headers = curl_slist_append(curl_headers, auth_hdr);
-    curl_headers = curl_slist_append(curl_headers, schema_uri_hdr);
-    curl_headers = curl_slist_append(curl_headers, schema_ver_hdr);
-    curl_headers = curl_slist_append(curl_headers, content_type_hdr);
-
-    if(req->hdrs) {
-        for (zend_hash_internal_pointer_reset(req->hdrs);
-                zend_hash_get_current_data(req->hdrs, (void *)&cur_val) == SUCCESS;
-                zend_hash_move_forward(req->hdrs)) {
-            /* check if a string based key is used */
-            switch (zend_hash_get_current_key_ex(req->hdrs, &cur_key, &cur_key_len, &num_key, 0, NULL)) {
-#if (PHP_MAJOR_VERSION >= 6)
-                case HASH_KEY_IS_UNICODE:
-                    {
-                        char *temp;
-                        int temp_len;
-
-                        zend_unicode_to_string(UG(utf8_conv), &temp, &temp_len, cur_key.u, cur_key_len-1 TSRMLS_CC);
-                        smart_str_appendl(&sheader, temp, temp_len);
-                        efree(temp);
-                    }
-                    break;
-#endif
-                case HASH_KEY_IS_STRING:
-                    smart_str_appendl(&sheader, ZEND_HASH_KEY_STRVAL(cur_key), cur_key_len-1);
-                    break;
-                default:
-                    continue;
-            }
-            smart_str_appends(&sheader, ": ");
-            switch (Z_TYPE_PP(cur_val)) {
-                case IS_STRING:
-                    smart_str_appendl(&sheader, Z_STRVAL_PP(cur_val), Z_STRLEN_PP(cur_val));
-                    break;
-#if (PHP_MAJOR_VERSION >= 6)
-                case IS_UNICODE:
-                    {
-                        char *temp;
-                        int temp_len;
-
-                        zend_unicode_to_string(UG(utf8_conv), &temp, &temp_len, Z_USTRVAL_PP(cur_val), Z_USTRLEN_PP(cur_val) TSRMLS_CC);
-                        smart_str_appendl(&sheader, temp, temp_len);
-                        efree(temp);
-                    }
-                    break;
-#endif
-                default:
-                    smart_str_free(&sheader);
-                    continue;
-            }
-
-            smart_str_0(&sheader);
-            curl_headers = curl_slist_append(curl_headers, sheader.c);
-            smart_str_free(&sheader);
-        }
-    }
-
-    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, curl_headers);
+    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, req->curl_headers);
     curl_easy_setopt(curl, CURLOPT_URL, req->uri);
     curl_easy_setopt(curl, CURLOPT_POSTFIELDS, req->payload);
     curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, strlen(req->payload));
@@ -318,17 +245,15 @@ static void* php_xcom_send_msg(void *r) /* {{{ */
         req->xcom->debugArr = info;
     }
 
-    if (curl_headers) {
-        curl_slist_free_all(curl_headers);
+    if (req->curl_headers) {
+        curl_slist_free_all(req->curl_headers);
     }
 
     curl_easy_cleanup(curl);
     req->response_code = response_code;
     if(req->async) {
-        efree(req->cap_token);
-        efree(req->uri);
-        efree(req->schema_uri);
-        zend_hash_destroy(req->hdrs);
+        free(req->payload);
+        free(req);
     }
     return NULL;
 }
@@ -420,13 +345,18 @@ int php_xcom_obj_from_avro_msg(zval **obj, char *msg, char *json_schema TSRMLS_D
 
 static void* php_xcom_send_msg_common(INTERNAL_FUNCTION_PARAMETERS, int async) {
     php_xcom *xcom;
-    zval *obj, *data_obj, *debug, *hdrs = NULL, *tmp;
+    zval *obj, *data_obj, *debug, *hdrs = NULL, **cur_val;
     char *topic, *json_schema, *schema_uri;
     size_t topic_len = 0, schema_len = 0, schema_uri_len = 0;
     char *msg = NULL;
     long resp_code = -1;
     pthread_t thr;
     php_xcom_req_t *req;
+    char content_type_hdr[] = "Content-Type: avro/binary", auth_hdr[4096] = "", schema_ver_hdr[32] = "", schema_uri_hdr[1024] = "";
+    uint cur_key_len;
+    ulong num_key;
+    zend_hash_key_type cur_key;
+    smart_str sheader = {0};
     HashTable *h_hdrs;
 
     if (zend_parse_method_parameters(ZEND_NUM_ARGS() TSRMLS_CC, getThis(), "OsOs|sa", &obj, xcom_ce, &topic, &topic_len, &data_obj, zend_standard_class_def,
@@ -438,42 +368,98 @@ static void* php_xcom_send_msg_common(INTERNAL_FUNCTION_PARAMETERS, int async) {
 
     msg = php_xcom_avro_record_from_obj(data_obj, json_schema TSRMLS_CC);
 
-    debug = zend_read_property(xcom_ce, obj, "__debug", sizeof("__debug")-1, 1 TSRMLS_CC);
-
     if(async) {
-        req = emalloc(sizeof(php_xcom_req_t));
+        req = malloc(sizeof(php_xcom_req_t));
         req->async = 1;
     } else {
         req = do_alloca(sizeof(php_xcom_req_t));
         req->async = 0;
     }
+    req->curl_headers = NULL;
 
-    spprintf(&req->uri, 0, "%s/%s", xcom->fabric_url, topic);
+    if(xcom->cap_token) {
+        snprintf(auth_hdr, sizeof(auth_hdr), "Authorization: %s", xcom->cap_token);
+    }
+
+    if(schema_uri_len) {
+        snprintf(schema_uri_hdr, sizeof(schema_uri_hdr), "X-XC-SCHEMA-URI: %s", schema_uri);
+    }
+    snprintf(schema_ver_hdr, sizeof(schema_ver_hdr), "X-XC-SCHEMA-VERSION: %s", "1.0.0");
+
+    req->curl_headers = curl_slist_append(req->curl_headers, "Expect:");
+    req->curl_headers = curl_slist_append(req->curl_headers, auth_hdr);
+    req->curl_headers = curl_slist_append(req->curl_headers, schema_uri_hdr);
+    req->curl_headers = curl_slist_append(req->curl_headers, schema_ver_hdr);
+    req->curl_headers = curl_slist_append(req->curl_headers, content_type_hdr);
+
+    if(hdrs) {
+        h_hdrs = HASH_OF(hdrs);
+        for (zend_hash_internal_pointer_reset(h_hdrs);
+                zend_hash_get_current_data(h_hdrs, (void *)&cur_val) == SUCCESS;
+                zend_hash_move_forward(h_hdrs)) {
+            /* check if a string based key is used */
+            switch (zend_hash_get_current_key_ex(h_hdrs, &cur_key, &cur_key_len, &num_key, 0, NULL)) {
+#if (PHP_MAJOR_VERSION >= 6)
+                case HASH_KEY_IS_UNICODE:
+                    {
+                        char *temp;
+                        int temp_len;
+
+                        zend_unicode_to_string(UG(utf8_conv), &temp, &temp_len, cur_key.u, cur_key_len-1 TSRMLS_CC);
+                        smart_str_appendl(&sheader, temp, temp_len);
+                        efree(temp);
+                    }
+                    break;
+#endif
+                case HASH_KEY_IS_STRING:
+                    smart_str_appendl(&sheader, ZEND_HASH_KEY_STRVAL(cur_key), cur_key_len-1);
+                    break;
+                default:
+                    continue;
+            }
+            smart_str_appends(&sheader, ": ");
+            switch (Z_TYPE_PP(cur_val)) {
+                case IS_STRING:
+                    smart_str_appendl(&sheader, Z_STRVAL_PP(cur_val), Z_STRLEN_PP(cur_val));
+                    break;
+#if (PHP_MAJOR_VERSION >= 6)
+                case IS_UNICODE:
+                    {
+                        char *temp;
+                        int temp_len;
+
+                        zend_unicode_to_string(UG(utf8_conv), &temp, &temp_len, Z_USTRVAL_PP(cur_val), Z_USTRLEN_PP(cur_val) TSRMLS_CC);
+                        smart_str_appendl(&sheader, temp, temp_len);
+                        efree(temp);
+                    }
+                    break;
+#endif
+                default:
+                    smart_str_free(&sheader);
+                    continue;
+            }
+
+            smart_str_0(&sheader);
+            req->curl_headers = curl_slist_append(req->curl_headers, sheader.c);
+            smart_str_free(&sheader);
+        }
+    }
+
+    debug = zend_read_property(xcom_ce, obj, "__debug", sizeof("__debug")-1, 1 TSRMLS_CC);
+
+    snprintf(req->uri, sizeof(req->uri), "%s/%s", xcom->fabric_url, topic);
     req->debug = debug ? Z_BVAL_P(debug) : 0;
-    req->schema_uri_len = schema_uri_len;
 
     if(async) {
-        spprintf(&req->cap_token, 0, "%s", xcom->cap_token);
-        spprintf(&req->schema_uri, 0, "%s", schema_uri);
-        spprintf(&req->payload, 0, "%s", msg);
+        req->payload = strdup(msg);
         req->debug = debug ? Z_BVAL_P(debug) : 0;
-        if(hdrs) {
-            ALLOC_HASHTABLE(h_hdrs);
-            zend_hash_init(h_hdrs, 0, NULL, ZVAL_PTR_DTOR, 0);
-            zend_hash_copy(h_hdrs, (HASH_OF(hdrs)), (copy_ctor_func_t) zval_add_ref, (void *) &tmp, sizeof(zval *));
-            req->hdrs = h_hdrs;
-        }
         pthread_create(&thr, &pthread_attrs, php_xcom_send_msg, (void*)req);
         resp_code = 0L;
     } else {
         req->xcom = xcom;
-        req->cap_token = xcom->cap_token;
-        req->schema_uri = schema_uri;
         req->payload = msg;
-        req->hdrs = hdrs ? HASH_OF(hdrs) : NULL;
         php_xcom_send_msg(req);
         resp_code = req->response_code;
-        efree(req->uri);
     }
 
     RETVAL_LONG(resp_code);
