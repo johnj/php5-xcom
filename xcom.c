@@ -372,7 +372,7 @@ static void* php_xcom_send_msg_common(INTERNAL_FUNCTION_PARAMETERS, int async) {
         req = malloc(sizeof(php_xcom_req_t));
         req->async = 1;
     } else {
-        req = do_alloca(sizeof(php_xcom_req_t));
+        req = emalloc(sizeof(php_xcom_req_t));
         req->async = 0;
     }
     req->curl_headers = NULL;
@@ -460,6 +460,7 @@ static void* php_xcom_send_msg_common(INTERNAL_FUNCTION_PARAMETERS, int async) {
         req->payload = msg;
         php_xcom_send_msg(req);
         resp_code = req->response_code;
+        efree(req);
     }
 
     RETVAL_LONG(resp_code);
