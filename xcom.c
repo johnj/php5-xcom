@@ -777,11 +777,9 @@ XCOM_ME(__destruct,arginfo_xcom_noparams,ZEND_ACC_PUBLIC)
 static php_xcom* php_xcom_new(zend_class_entry *ce TSRMLS_DC) /* {{{ */
 {
     php_xcom *xcom;
-#if (PHP_MAJOR_VERSION == 5 && PHP_MINOR_VERSION < 3)
 #ifndef ZEND_ENGINE_2_4
     zval *tmp;
     tmp = NULL;
-#endif
 #endif
 
     xcom = ecalloc(1, sizeof(php_xcom));
@@ -797,10 +795,10 @@ static php_xcom* php_xcom_new(zend_class_entry *ce TSRMLS_DC) /* {{{ */
     xcom->zo.guards = NULL;
 #else
     zend_object_std_init(&xcom->zo, ce TSRMLS_CC);
-#ifndef ZEND_ENGINE_2_4
-    zend_hash_copy(xcom->zo.properties, &ce->default_properties, (copy_ctor_func_t) zval_add_ref, (void *) &tmp, sizeof(zval *));
-#else
+#ifdef ZEND_ENGINE_2_4
     object_properties_init(&xcom->zo, ce);
+#else
+    zend_hash_copy(xcom->zo.properties, &ce->default_properties, (copy_ctor_func_t) zval_add_ref, (void *) &tmp, sizeof(zval *));
 #endif
 #endif
 
