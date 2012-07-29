@@ -134,7 +134,7 @@ static void* php_xcom_send_msg(void *r) /* {{{ */
     zval *info;
 
     req = (php_xcom_req_t *)r;
-    
+
     curl = curl_easy_init();
 
     curl_easy_setopt(curl, CURLOPT_HTTPHEADER, req->curl_headers);
@@ -346,7 +346,7 @@ int php_xcom_obj_from_avro_msg(zval **obj, char *msg, char *json_schema TSRMLS_D
 static void* php_xcom_send_msg_common(INTERNAL_FUNCTION_PARAMETERS, int async) {
     php_xcom *xcom;
     zval *obj, *data_obj, *debug, *hdrs = NULL, **cur_val;
-    char *topic, *json_schema, *schema_uri;
+    char *topic, *json_schema = NULL, *schema_uri;
     size_t topic_len = 0, schema_len = 0, schema_uri_len = 0;
     char *msg = NULL;
     long resp_code = -1;
@@ -359,14 +359,31 @@ static void* php_xcom_send_msg_common(INTERNAL_FUNCTION_PARAMETERS, int async) {
     smart_str sheader = {0};
     HashTable *h_hdrs;
 
-    if (zend_parse_method_parameters(ZEND_NUM_ARGS() TSRMLS_CC, getThis(), "OsOs|sa", &obj, xcom_ce, &topic, &topic_len, &data_obj, zend_standard_class_def,
-                &json_schema, &schema_len, &schema_uri, &schema_uri_len, &hdrs)==FAILURE) {
+    if (zend_parse_method_parameters(ZEND_NUM_ARGS() TSRMLS_CC, getThis(), "Osz|ssa", &obj, xcom_ce, &topic, &topic_len, &data_obj, &json_schema, &schema_len, &schema_uri, &schema_uri_len, &hdrs)==FAILURE) {
         return NULL;
     }
 
     xcom = php_xcom_fetch_obj_store(obj TSRMLS_CC);
 
-    msg = php_xcom_avro_record_from_obj(data_obj, json_schema TSRMLS_CC);
+    if(json_schema) {
+        if(Z_TYPE_P(data_obj)!=IS_OBJECT && Z_TYPE_P(data_obj)!=IS_ARRAY) {
+            php_error_docref(NULL TSRMLS_CC, E_ERROR, "the data must be specified in an object or an array for avro messages (a schema was passed)");
+            RETVAL_FALSE;
+            return NULL;
+        }
+        msg = php_xcom_avro_record_from_obj(data_obj, json_schema TSRMLS_CC);
+        if(msg==NULL) {
+            RETVAL_FALSE;
+            return NULL;
+        }
+    } else {
+        convert_to_string_ex(&data_obj);
+        msg = Z_STRVAL_P(data_obj);
+        if(!strlen(msg)) {
+            RETVAL_FALSE;
+            return NULL;
+        }
+    }
 
     if(async) {
         req = malloc(sizeof(php_xcom_req_t));
@@ -445,10 +462,13 @@ static void* php_xcom_send_msg_common(INTERNAL_FUNCTION_PARAMETERS, int async) {
         }
     }
 
-    debug = zend_read_property(xcom_ce, obj, "__debug", sizeof("__debug")-1, 1 TSRMLS_CC);
-
     snprintf(req->uri, sizeof(req->uri), "%s/%s", xcom->fabric_url, topic);
+
+    debug = zend_read_property(xcom_ce, obj, "__debug", sizeof("__debug")-1, 0 TSRMLS_CC);
+
     req->debug = debug ? Z_BVAL_P(debug) : 0;
+
+    req->debug = 0;
 
     if(async) {
         req->payload = strdup(msg);
@@ -465,7 +485,9 @@ static void* php_xcom_send_msg_common(INTERNAL_FUNCTION_PARAMETERS, int async) {
 
     RETVAL_LONG(resp_code);
 
-    efree(msg);
+    if(msg) {
+        efree(msg);
+    }
 
     return NULL;
 }
@@ -493,7 +515,7 @@ static char* php_xcom_avro_record_from_obj(zval *obj, char *json_schema TSRMLS_D
 
     avro_generic_value_new(iface, &val);
 
-    myht = Z_OBJPROP_P(obj);
+    myht = Z_TYPE_P(obj)==IS_OBJECT ? Z_OBJPROP_P(obj) : HASH_OF(obj);
 
     if (myht && myht->nApplyCount > 1) {
         php_error_docref(NULL TSRMLS_CC, E_WARNING, "recursion detected");
@@ -697,7 +719,7 @@ XCOM_METHOD(getLastResponseInfo) /* {{{ */
         RETURN_ZVAL(xcom->debugArr, 1, 0);
     }
 
-    RETURN_FALSE
+    RETURN_FALSE;
 }
 /* }}} */
 
