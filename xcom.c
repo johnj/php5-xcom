@@ -365,7 +365,7 @@ static void* php_xcom_send_msg_common(INTERNAL_FUNCTION_PARAMETERS, int async) {
 
     xcom = php_xcom_fetch_obj_store(obj TSRMLS_CC);
 
-    if(json_schema) {
+    if(schema_len) {
         if(Z_TYPE_P(data_obj)!=IS_OBJECT && Z_TYPE_P(data_obj)!=IS_ARRAY) {
             php_error_docref(NULL TSRMLS_CC, E_ERROR, "the data must be specified in an object or an array for avro messages (a schema was passed)");
             RETVAL_FALSE;
