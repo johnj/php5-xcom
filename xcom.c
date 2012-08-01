@@ -626,13 +626,13 @@ XCOM_METHOD(__construct) /* {{{ */
 XCOM_METHOD(encode) /* {{{ */
 {
     php_xcom *xcom;
-    zval *obj, *data_obj, *hdrs = NULL;
-    char *json_schema, *schema_uri;
-    size_t schema_len = 0, schema_uri_len = 0;
+    zval *obj, *data_obj;
+    char *json_schema;
+    size_t schema_len = 0;
     char *msg = NULL;
 
-    if (zend_parse_method_parameters(ZEND_NUM_ARGS() TSRMLS_CC, getThis(), "OOs|sa", &obj, xcom_ce, &data_obj, zend_standard_class_def,
-                &json_schema, &schema_len, &schema_uri, &schema_uri_len, &hdrs)==FAILURE) {
+    if (zend_parse_method_parameters(ZEND_NUM_ARGS() TSRMLS_CC, getThis(), "OOs", &obj, xcom_ce, &data_obj, zend_standard_class_def,
+                &json_schema, &schema_len)==FAILURE) {
         return;
     }
 
@@ -774,7 +774,7 @@ ZEND_ARG_INFO(0, topic)
 ZEND_END_ARG_INFO()
 
 XCOM_ARGINFO
-ZEND_BEGIN_ARG_INFO_EX(arginfo_xcom_decode, 0, 0, 2)
+ZEND_BEGIN_ARG_INFO_EX(arginfo_xcom_encdec, 0, 0, 2)
 ZEND_ARG_INFO(0, msg)
 ZEND_ARG_INFO(0, schema)
 ZEND_END_ARG_INFO()
@@ -787,8 +787,8 @@ static zend_function_entry xcom_methods[] = { /* {{{ */
 XCOM_ME(__construct,arginfo_xcom__construct,ZEND_ACC_PUBLIC|ZEND_ACC_CTOR)
 XCOM_ME(send,arginfo_xcom_send,ZEND_ACC_PUBLIC)
 XCOM_ME(sendAsync,arginfo_xcom_send,ZEND_ACC_PUBLIC)
-XCOM_ME(encode,arginfo_xcom_send,ZEND_ACC_PUBLIC)
-XCOM_ME(decode,arginfo_xcom_decode,ZEND_ACC_PUBLIC)
+XCOM_ME(encode,arginfo_xcom_encdec,ZEND_ACC_PUBLIC)
+XCOM_ME(decode,arginfo_xcom_encdec,ZEND_ACC_PUBLIC)
 XCOM_ME(getLastResponse,arginfo_xcom_noparams,ZEND_ACC_PUBLIC)
 XCOM_ME(getLastResponseInfo,arginfo_xcom_noparams,ZEND_ACC_PUBLIC)
 XCOM_ME(getDebugOutput,arginfo_xcom_noparams,ZEND_ACC_PUBLIC)
