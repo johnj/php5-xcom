@@ -19,12 +19,16 @@ if test "$PHP_XCOM" != "no"; then
     if test "x$HAVE_CMAKE" = "xfalse"; then
       AC_MSG_ERROR([*** CMake is required to build libavro, please install CMake before continuing])
     else
-      AC_MSG_NOTICE([*** libavro is required before continuing, please cd into the avro/ directory by running:])
+      AC_MSG_NOTICE([*** libavro is required before continuing, please install libavro in the avro/ directory by running:])
       AC_MSG_NOTICE([*** $ cd avro && cmake . && sudo make install])
       AC_MSG_ERROR([*** libavro not found.])
     fi
     
   ])
+
+  AC_CHECK_HEADERS([curl.h], []
+   [AC_MSG_ERROR([Couldn't find or include curl.h (do you have the libcurl dev package installed?])],
+   )
 
   PHP_ADD_LIBRARY(curl,,XCOM_SHARED_LIBADD)
   PHP_ADD_LIBRARY(pthread,,XCOM_SHARED_LIBADD)
