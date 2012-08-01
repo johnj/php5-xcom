@@ -462,6 +462,105 @@ static void* php_xcom_send_msg_common(INTERNAL_FUNCTION_PARAMETERS, int async) {
         }
     }
 
+    if(xcom->fabric_url==NULL) {
+      php_error_docref(NULL TSRMLS_CC, E_ERROR, "the fabric URL is not set");
+      return NULL;
+    }
+
+    snprintf(req->uri, sizeof(req->uri), "%s/%s", xcom->fabric_url, topic);
+
+    debug = zend_read_property(xcom_ce, obj, "__debug", sizeof("__debug")-1, 0 TSRMLS_CC);
+
+    req->debug = debug ? Z_BVAL_P(debug) : 0;
+
+    req->debug = 0;
+
+    if(async) {
+        req->payload = strdup(msg);
+        req->debug = debug ? Z_BVAL_P(debug) : 0;
+        pthread_create(&thr, &pthread_attrs, php_xcom_send_msg, (void*)req);
+        resp_code = 0L;
+    } else {
+        req->xcom = xcom;
+        req->payload = msg;
+        php_xcom_send_msg(req);
+        resp_code = req->response_code;
+        efree(req);
+    }
+
+    RETVAL_LONG(resp_code);
+
+    if(msg) {
+        efree(msg);
+    }
+
+    return NULL;
+}
+
+static char* php_xcom_avro_record_from_obj(zval *obj, char *json_schema TSRMLS_DC) /* {{{ */
+{
+    int i;
+    HashTable *myht;
+    char *msg_buf = NULL;
+    avro_writer_t writer = NULL;
+    avro_value_t val;
+    size_t writer_bytes = 0;
+    avro_schema_t schema = NULL;
+    avro_schema_error_t error = NULL;
+    avro_value_iface_t *iface;
+
+    avro_schema_from_json(json_schema, strlen(json_schema), &schema, &error);
+
+    if(schema==NULL) {
+      php_error_docref(NULL TSRMLS_CC, 
+    }
+    snprintf(req->uri, sizeof(req->uri), "%s/%s", xcom->fabric_url, topic);
+
+    debug = zend_read_property(xcom_ce, obj, "__debug", sizeof("__debug")-1, 0 TSRMLS_CC);
+
+    req->debug = debug ? Z_BVAL_P(debug) : 0;
+
+    req->debug = 0;
+
+    if(async) {
+        req->payload = strdup(msg);
+        req->debug = debug ? Z_BVAL_P(debug) : 0;
+        pthread_create(&thr, &pthread_attrs, php_xcom_send_msg, (void*)req);
+        resp_code = 0L;
+    } else {
+        req->xcom = xcom;
+        req->payload = msg;
+        php_xcom_send_msg(req);
+        resp_code = req->response_code;
+        efree(req);
+    }
+
+    RETVAL_LONG(resp_code);
+
+    if(msg) {
+        efree(msg);
+    }
+
+    return NULL;
+}
+
+static char* php_xcom_avro_record_from_obj(zval *obj, char *json_schema TSRMLS_DC) /* {{{ */
+{
+    int i;
+    HashTable *myht;
+    char *msg_buf = NULL;
+    avro_writer_t writer = NULL;
+    avro_value_t val;
+    size_t writer_bytes = 0;
+    avro_schema_t schema = NULL;
+    avro_schema_error_t error = NULL;
+    avro_value_iface_t *iface;
+
+    avro_schema_from_json(json_schema, strlen(json_schema), &schema, &error);
+
+    if(schema==NULL) {
+      php_error_docref(NULL TSRMLS_CC, 
+    }
     snprintf(req->uri, sizeof(req->uri), "%s/%s", xcom->fabric_url, topic);
 
     debug = zend_read_property(xcom_ce, obj, "__debug", sizeof("__debug")-1, 0 TSRMLS_CC);
@@ -606,18 +705,26 @@ XCOM_METHOD(__construct) /* {{{ */
 {
     php_xcom *xcom;
     zval *obj;
-    char *fab_url, *fab_token, *cap_token;
+    char *fab_url = NULL, *fab_token = NULL, *cap_token = NULL;
     size_t fab_url_len = 0, fab_token_len = 0, cap_token_len = 0;
 
-    if (zend_parse_method_parameters(ZEND_NUM_ARGS() TSRMLS_CC, getThis(), "Osss", &obj, xcom_ce, &fab_url, &fab_url_len, &fab_token, &fab_token_len, &cap_token, &cap_token_len)==FAILURE) {
+    if (zend_parse_method_parameters(ZEND_NUM_ARGS() TSRMLS_CC, getThis(), "O|sss", &obj, xcom_ce, &fab_url, &fab_url_len, &fab_token, &fab_token_len, &cap_token, &cap_token_len)==FAILURE) {
         ZVAL_NULL(obj);
         return;
     }
 
     xcom = php_xcom_fetch_obj_store(obj TSRMLS_CC);
-    xcom->fabric_url = estrndup(fab_url, fab_url_len);
-    xcom->fabric_token = estrndup(fab_token, fab_token_len);
-    xcom->cap_token = estrndup(cap_token, cap_token_len);
+    if(fab_url_len) {
+        xcom->fabric_url = estrndup(fab_url, fab_url_len);
+    }
+
+    if(fab_token_len) {
+        xcom->fabric_token = estrndup(fab_token, fab_token_len);
+    }
+    
+    if(cap_token_len) {
+        xcom->cap_token = estrndup(cap_token, cap_token_len);
+    }
 
     return;
 }
