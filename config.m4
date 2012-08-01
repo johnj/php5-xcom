@@ -26,9 +26,9 @@ if test "$PHP_XCOM" != "no"; then
     
   ])
 
-  AC_CHECK_HEADERS([curl.h], []
+  AC_CHECK_HEADER([curl/curl.h], , 
    [AC_MSG_ERROR([Couldn't find or include curl.h (do you have the libcurl dev package installed?])],
-   )
+  )
 
   PHP_ADD_LIBRARY(curl,,XCOM_SHARED_LIBADD)
   PHP_ADD_LIBRARY(pthread,,XCOM_SHARED_LIBADD)
