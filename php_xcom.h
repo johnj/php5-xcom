@@ -97,6 +97,8 @@ curl_formfree(f);
 #define XCOM_HTTP_PORT 80
 #define XCOM_HTTPS_PORT 443
 #define XCOM_MAX_HEADER_LEN 512L
+#define XCOM_FABRIC_PRODUCTION "https://api.x.com/fabric/"
+#define XCOM_FABRIC_SANDBOX "https://api.sandbox.x.com/fabric/"
 
 extern zend_module_entry xcom_module_entry;
 
