@@ -3,7 +3,7 @@
 http://pear.php.net/dtd/tasks-1.0.xsd
 http://pear.php.net/dtd/package-2.0
 http://pear.php.net/dtd/package-2.0.xsd">
-<name>xcom</name>
+<name>xcommerce</name>
   <channel>pecl.php.net</channel>
   <summary>X.commerce bindings and helper methods</summary>
   <description>
@@ -45,7 +45,7 @@ http://pear.php.net/dtd/package-2.0.xsd">
       </pearinstaller>
     </required>
   </dependencies>
-  <providesextension>xcom</providesextension>
+  <providesextension>xcommerce</providesextension>
   <extsrcrelease>
   </extsrcrelease>
   <changelog />

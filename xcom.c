@@ -1011,7 +1011,7 @@ PHP_MINFO_FUNCTION(xcom)
 zend_module_entry xcom_module_entry = {
 STANDARD_MODULE_HEADER_EX, NULL,
 NULL,
-"X.commerce",
+"xcommerce",
 NULL,
 PHP_MINIT(xcom),
 PHP_MSHUTDOWN(xcom),
