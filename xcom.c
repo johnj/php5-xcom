@@ -878,6 +878,8 @@ XCOM_ARGINFO
 ZEND_BEGIN_ARG_INFO_EX(arginfo_xcom_send, 0, 0, 2)
 ZEND_ARG_INFO(0, obj)
 ZEND_ARG_INFO(0, topic)
+ZEND_ARG_INFO(0, json_schema)
+ZEND_ARG_INFO(0, http_headers)
 ZEND_END_ARG_INFO()
 
 XCOM_ARGINFO
