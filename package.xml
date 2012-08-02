@@ -7,7 +7,8 @@ http://pear.php.net/dtd/package-2.0.xsd">
   <channel>pecl.php.net</channel>
   <summary>X.commerce bindings and helper methods</summary>
   <description>
-   ext/xcom provides bindings and helper methods for building and consuming API's in the X.commerce ecosystem.
+   This extension provides functionality for building and
+   consuming API's in the X.commerce ecosystem.
   </description>
   <lead>
     <name>John Jawed</name>
