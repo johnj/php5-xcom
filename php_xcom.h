@@ -102,7 +102,7 @@ curl_formfree(f);
 
 extern zend_module_entry xcom_module_entry;
 
-#define phpext_xcom_ptr &oauth_module_entry
+#define phpext_xcom_ptr &xcom_module_entry
 
 #define PHP_XCOM_API
 
