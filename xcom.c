@@ -620,6 +620,7 @@ XCOM_METHOD(__construct) /* {{{ */
     }
 
     xcom = php_xcom_fetch_obj_store(obj TSRMLS_CC);
+
     if(fab_url_len) {
         xcom->fabric_url = estrndup(fab_url, fab_url_len);
     }
@@ -631,6 +632,8 @@ XCOM_METHOD(__construct) /* {{{ */
     if(cap_token_len) {
         xcom->cap_token = estrndup(cap_token, cap_token_len);
     }
+
+    zend_update_property_bool(xcom_ce, obj, "__debug", sizeof("__debug")-1, 0L TSRMLS_CC);
 
     return;
 }
