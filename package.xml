@@ -18,7 +18,7 @@ http://pear.php.net/dtd/package-2.0.xsd">
   </lead>
   <date>2012-08-02</date>
   <version>
-    <release>1.0.0</release>
+    <release>1.0.1</release>
     <api>1.0.0</api>
   </version>
   <stability>
@@ -27,13 +27,17 @@ http://pear.php.net/dtd/package-2.0.xsd">
   </stability>
   <license uri="http://www.opensource.org/licenses/bsd-license.php">BSD</license>
   <notes>
-    - First release (yah!)
+    - [maintain] remove bundled libavro
+    - [bug] set a __debug value
+    - [improve] provide libavro install instructions
+    - [improve] add README.md in package
   </notes>
   <contents>
     <dir name="/">
       <file name="config.m4" role="src" />
       <file name="xcom.c" role="src" />
       <file name="php_xcom.h" role="src" />
+      <file name="README.md" role="doc" />
     </dir>
   </contents>
   <dependencies>
@@ -47,7 +51,25 @@ http://pear.php.net/dtd/package-2.0.xsd">
     </required>
   </dependencies>
   <providesextension>xcommerce</providesextension>
+
   <extsrcrelease>
   </extsrcrelease>
-  <changelog />
+
+  <changelog>
+   <release>
+    <date>2012-08-02</date>
+    <version>
+     <release>1.0.0</release>
+     <api>1.0.0</api>
+    </version>
+    <stability>
+     <release>stable</release>
+     <api>stable</api>
+    </stability>
+    <license uri="http://www.opensource.org/licenses/bsd-license.php">BSD</license>
+    <notes>
+     - First release (yah!)
+    </notes>
+   </release>
+  </changelog>
 </package>
