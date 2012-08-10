@@ -19,8 +19,8 @@ if test "$PHP_XCOM" != "no"; then
     if test "x$HAVE_CMAKE" = "xfalse"; then
       AC_MSG_ERROR([*** CMake is required to build libavro, please install CMake before continuing])
     else
-      AC_MSG_NOTICE([*** libavro is required before continuing, please install libavro in the avro/ directory by running:])
-      AC_MSG_NOTICE([*** $ cd avro && cmake . && sudo make install])
+      AC_MSG_NOTICE([*** libavro is required before continuing, please install libavro])
+      AC_MSG_NOTICE([*** detailed instructions: https://github.com/johnj/php5-xcom/blob/master/README.md#libavro])
       AC_MSG_ERROR([*** libavro not found.])
     fi
     

@@ -14,7 +14,7 @@ $ make && sudo make install
 # echo "extension=xcom.so" >> /your/php.ini
 </pre>
 
-A gcc-like toolchain, php headers, and libavro are required.
+A gcc-like toolchain, php headers, and libavro (installation instructions below) are required.
 
 Examples
 ========
@@ -88,3 +88,16 @@ var_dump($xcom->encode($data, '{"json": "schema"}'));
 
 ?>
 ```
+
+libavro
+========
+In order to compile the xcommerce extension you will need libavro.
+
+The libavro build uses CMake (usually available in all package managers).
+
+<pre>
+$ git clone https://github.com/johnj/avro.git
+$ cd avro/lang/c
+$ cmake .
+$ sudo make install
+</pre>
