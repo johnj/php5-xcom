@@ -111,7 +111,7 @@ extern zend_module_entry xcom_module_entry;
 #define XCOM_SSLCHECK_NONE 0
 #define XCOM_SSLCHECK_HOST 1
 #define XCOM_SSLCHECK_PEER 2
-#define XCOM_SSLCHECK_BOTH (OAUTH_SSLCHECK_HOST | OAUTH_SSLCHECK_PEER)
+#define XCOM_SSLCHECK_BOTH (XCOM_SSLCHECK_HOST | XCOM_SSLCHECK_PEER)
 
 /* errors */
 #define XCOM_ERR_BAD_REQUEST 400
@@ -153,7 +153,6 @@ typedef struct {
     smart_str debug_output;
     smart_str headers_in;
     smart_str headers_out;
-    uint sslcheck; /* whether we check for SSL verification or not */
     uint debug; /* verbose output */
     long timeout; /* timeout in milliseconds */
     zval *this_ptr;
@@ -173,6 +172,7 @@ typedef struct {
     long response_code;
     int debug;
     int async;
+    int sslchecks;
 } php_xcom_req_t;
 
 #if (PHP_MAJOR_VERSION >= 6)

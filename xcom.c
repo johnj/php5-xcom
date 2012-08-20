@@ -142,6 +142,14 @@ static void* php_xcom_send_msg(void *r) /* {{{ */
     curl_easy_setopt(curl, CURLOPT_POSTFIELDS, req->payload);
     curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, strlen(req->payload));
 
+    if(req->sslchecks & XCOM_SSLCHECK_HOST) {
+        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 1L);
+    }
+
+    if(req->sslchecks & XCOM_SSLCHECK_PEER) {
+        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
+    }
+
     if(!req->async) {
         curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, php_xcom_read_response);
         curl_easy_setopt(curl, CURLOPT_WRITEDATA, req->xcom);
@@ -345,7 +353,7 @@ int php_xcom_obj_from_avro_msg(zval **obj, char *msg, char *json_schema TSRMLS_D
 
 static void* php_xcom_send_msg_common(INTERNAL_FUNCTION_PARAMETERS, int async) {
     php_xcom *xcom;
-    zval *obj, *data_obj, *debug, *hdrs = NULL, **cur_val;
+    zval *obj, *data_obj, *debug, *hdrs = NULL, **cur_val, *sslchecks;
     char *topic, *json_schema = NULL, *schema_uri;
     size_t topic_len = 0, schema_len = 0, schema_uri_len = 0;
     char *msg = NULL;
@@ -474,6 +482,10 @@ static void* php_xcom_send_msg_common(INTERNAL_FUNCTION_PARAMETERS, int async) {
     req->debug = debug ? Z_BVAL_P(debug) : 0;
 
     req->debug = 0;
+
+    sslchecks = zend_read_property(xcom_ce, obj, "__sslchecks", sizeof("__sslchecks")-1, 0 TSRMLS_CC);
+
+    req->sslchecks = Z_LVAL_P(sslchecks);
 
     if(async) {
         req->payload = strdup(msg);
@@ -634,6 +646,7 @@ XCOM_METHOD(__construct) /* {{{ */
     }
 
     zend_update_property_bool(xcom_ce, obj, "__debug", sizeof("__debug")-1, 0L TSRMLS_CC);
+    zend_update_property_bool(xcom_ce, obj, "__sslchecks", sizeof("__sslchecks")-1, XCOM_SSLCHECK_BOTH TSRMLS_CC);
 
     return;
 }
