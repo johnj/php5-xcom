@@ -101,3 +101,8 @@ $ cd avro/lang/c
 $ cmake .
 $ sudo make install
 </pre>
+
+SSL Certificates
+================
+If you run into issues with SSL negotiation, you can try to get the CA certs available
+@ http://curl.haxx.se/docs/caextract.html
