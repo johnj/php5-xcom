@@ -16,9 +16,9 @@ http://pear.php.net/dtd/package-2.0.xsd">
     <email>jawed@php.net</email>
     <active>yes</active>
   </lead>
-  <date>2012-08-02</date>
+  <date>2012-08-21</date>
   <version>
-    <release>1.0.1</release>
+    <release>1.0.2</release>
     <api>1.0.0</api>
   </version>
   <stability>
@@ -27,10 +27,8 @@ http://pear.php.net/dtd/package-2.0.xsd">
   </stability>
   <license uri="http://www.opensource.org/licenses/bsd-license.php">BSD</license>
   <notes>
-    - [maintain] remove bundled libavro
-    - [bug] set a __debug value
-    - [improve] provide libavro install instructions
-    - [improve] add README.md in package
+   - [bug] fix autoconf error if libavro is missing
+   - [new] add Xcom::getOnboardingURL
   </notes>
   <contents>
     <dir name="/">
@@ -56,6 +54,24 @@ http://pear.php.net/dtd/package-2.0.xsd">
   </extsrcrelease>
 
   <changelog>
+   <release>
+    <date>2012-08-10</date>
+    <version>
+     <release>1.0.1</release>
+     <api>1.0.0</api>
+    </version>
+    <stability>
+     <release>stable</release>
+     <api>stable</api>
+    </stability>
+    <license uri="http://www.opensource.org/licenses/bsd-license.php">BSD</license>
+    <notes>
+     - [maintain] remove bundled libavro
+     - [bug] set a __debug value
+     - [improve] provide libavro install instructions
+     - [improve] add README.md in package
+    </notes>
+   </release>
    <release>
     <date>2012-08-02</date>
     <version>
