@@ -44,6 +44,7 @@
 #include "ext/standard/php_lcg.h"
 #include "ext/pcre/php_pcre.h"
 #include "php_network.h"
+#include "ext/json/php_json.h"
 
 #include <curl/curl.h>
 #include <avro.h>
@@ -278,6 +279,10 @@ smart_str_free(&(a)->curl_info);
 #endif
 
 static char* php_xcom_avro_record_from_obj(zval *obj, char *json_schema TSRMLS_DC);
+
+#ifndef XCOM_ONBOARDING_URL
+#define XCOM_ONBOARDING_URL "https://devportal.x.com/merchant_onboarding"
+#endif
 
 #endif
 

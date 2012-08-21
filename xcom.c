@@ -102,6 +102,15 @@ static size_t php_xcom_read_response(char *ptr, size_t size, size_t nmemb, void 
 
     return relsize;
 }
+/* }}} */
+
+static size_t php_xcom_read_noop(char *ptr, size_t size, size_t nmemb, void *ctx) /* {{{ */
+{
+    uint relsize;
+    relsize = size * nmemb;
+    return relsize;
+}
+/* }}} */
 
 static int php_xcom_read_debug(CURL *ch, curl_infotype ign, char *debug, size_t len, void *ctx) /* {{{ */
 {
@@ -769,6 +778,70 @@ XCOM_METHOD(getDebugOutput) /* {{{ */
 }
 /* }}} */
 
+XCOM_METHOD(getOnboardingURL) /* {{{ */
+{
+    php_xcom *xcom;
+    zval *obj, *merchant_params;
+    char *cap_name, *agreement_url, *urlencoded_payload, *redirect_url = NULL, *request_payload;
+    int cap_name_len = 0, agree_url_len, urlenc_len;
+    CURL *curl;
+    CURLcode cres;
+    smart_str json_payload = {0};
+
+    if (zend_parse_method_parameters(ZEND_NUM_ARGS() TSRMLS_CC, getThis(), "Oss", &obj, xcom_ce,
+        &cap_name, &cap_name_len, &agreement_url, &agree_url_len)==FAILURE) {
+        return;
+    }
+
+    xcom = php_xcom_fetch_obj_store(obj TSRMLS_CC);
+
+    /* the goal here is to craft the json request for the onboarding
+     * flow and return the redirect URL (authn) */
+
+    MAKE_STD_ZVAL(merchant_params);
+    array_init(merchant_params);
+
+#if (PHP_MAJOR_VERSION >= 6)
+    add_ascii_assoc_string(merchant_params, "target_capability_name", cap_name, 0);
+#else
+    add_assoc_string(merchant_params, "target_capability_name", cap_name, 0);
+#endif
+
+    add_assoc_bool(merchant_params, "is_registered", 0);
+
+    php_json_encode(&json_payload, merchant_params, 0 TSRMLS_CC);
+
+    urlencoded_payload = php_url_encode(json_payload.c, json_payload.len, &urlenc_len);
+
+    spprintf(&request_payload, 0, "onboarding_info=%s", urlencoded_payload);
+
+    curl = curl_easy_init();
+
+    curl_easy_setopt(curl, CURLOPT_URL, XCOM_ONBOARDING_URL);
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, request_payload);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, php_xcom_read_noop);
+
+    cres = curl_easy_perform(curl);
+
+    if(cres==CURLE_OK) {
+        curl_easy_getinfo(curl, CURLINFO_REDIRECT_URL, &redirect_url);
+        if(redirect_url) {
+            RETVAL_STRING(redirect_url, 0);
+        }
+    } else {
+        RETVAL_BOOL(0);
+    }
+
+    smart_str_free(&json_payload);
+    zval_ptr_dtor(&merchant_params);
+    efree(urlencoded_payload);
+    efree(request_payload);
+    curl_easy_cleanup(curl);
+
+    return;
+}
+/* }}} */
+
 XCOM_METHOD(__destruct) /* {{{ */
 {
     php_xcom *xcom;
@@ -811,6 +884,12 @@ ZEND_ARG_INFO(0, schema)
 ZEND_END_ARG_INFO()
 
 XCOM_ARGINFO
+ZEND_BEGIN_ARG_INFO_EX(arginfo_xcom_onboarding, 0, 0, 2)
+ZEND_ARG_INFO(0, capability_name)
+ZEND_ARG_INFO(0, agreement_url)
+ZEND_END_ARG_INFO()
+
+XCOM_ARGINFO
 ZEND_BEGIN_ARG_INFO_EX(arginfo_xcom_noparams, 0, 0, 0)
 ZEND_END_ARG_INFO()
 
@@ -823,6 +902,7 @@ XCOM_ME(decode,arginfo_xcom_encdec,ZEND_ACC_PUBLIC)
 XCOM_ME(getLastResponse,arginfo_xcom_noparams,ZEND_ACC_PUBLIC)
 XCOM_ME(getLastResponseInfo,arginfo_xcom_noparams,ZEND_ACC_PUBLIC)
 XCOM_ME(getDebugOutput,arginfo_xcom_noparams,ZEND_ACC_PUBLIC)
+XCOM_ME(getOnboardingURL,arginfo_xcom_onboarding,ZEND_ACC_PUBLIC)
 XCOM_ME(__destruct,arginfo_xcom_noparams,ZEND_ACC_PUBLIC)
 {NULL, NULL, NULL}
 };
