@@ -1,0 +1,27 @@
+// $Id$
+// vim:ft=javascript
+
+ARG_WITH("xcom", "X.commerce support", "no");
+
+if (PHP_XCOM != "no") {
+	if (CHECK_LIB("libcurl_a.lib;libcurl.lib", "xcom", PHP_XCOM) &&
+			CHECK_HEADER_ADD_INCLUDE("curl/easy.h", "CFLAGS_XCOM") &&
+			CHECK_LIB("avro.lib", "xcom", PHP_XCOM) &&
+                        CHECK_HEADER_ADD_INCLUDE("avro/value.h", "CFLAGS_XCOM") &&
+			CHECK_LIB("libpthread.lib", "xcom", PHP_XCOM) &&
+                        CHECK_HEADER_ADD_INCLUDE("pthread.h", "CFLAGS_XCOM") &&
+			CHECK_LIB("ssleay32.lib", "XCOM", PHP_XCOM) &&
+			CHECK_LIB("libeay32.lib", "xcom", PHP_XCOM) 
+		&& CHECK_LIB("winmm.lib", "xcom", PHP_XCOM)
+		&& CHECK_LIB("wldap32.lib", "xcom", PHP_XCOM)
+		&& (((PHP_ZLIB=="no") && (CHECK_LIB("zlib_a.lib", "xcom", PHP_XCOM) ||  CHECK_LIB("zlib.lib", "xcom", PHP_XCOM))) || 
+			(PHP_ZLIB_SHARED && CHECK_LIB("zlib.lib", "xcom", PHP_XCOM)) || (PHP_ZLIB == "yes" && (!PHP_ZLIB_SHARED)))
+		) {
+		EXTENSION("xcom", "xcom.c", true);
+		ADD_FLAG("CFLAGS_XCOM", "/D CURL_STATICLIB");
+		ADD_FLAG("CFLAGS_XCOM", "/D XCOM_USE_CURL");
+		ADD_FLAG("LDFLAGS_XCOM", "/D /FORCE:MULTIPLE ");
+	} else {
+		WARNING("xcom not enabled; libraries and headers not found");
+	}
+}

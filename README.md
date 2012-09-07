@@ -16,6 +16,8 @@ $ make && sudo make install
 
 A gcc-like toolchain, php headers, and libavro (installation instructions below) are required.
 
+Pre-compiled Windows binaries can be found @ https://github.com/johnj/php5-xcom/downloads
+
 Examples
 ========
 Sending a message to X.commerce:
