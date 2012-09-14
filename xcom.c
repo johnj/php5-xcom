@@ -151,6 +151,9 @@ static void* php_xcom_send_msg(void *r) /* {{{ */
     curl_easy_setopt(curl, CURLOPT_POSTFIELDS, req->payload);
     curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, strlen(req->payload));
 
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
+
     if(req->sslchecks & XCOM_SSLCHECK_HOST) {
         curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 1L);
     }
@@ -363,20 +366,20 @@ int php_xcom_obj_from_avro_msg(zval **obj, char *msg, char *json_schema TSRMLS_D
 static void* php_xcom_send_msg_common(INTERNAL_FUNCTION_PARAMETERS, int async) {
     php_xcom *xcom;
     zval *obj, *data_obj, *debug, *hdrs = NULL, **cur_val, *sslchecks;
-    char *topic, *json_schema = NULL, *schema_uri;
-    size_t topic_len = 0, schema_len = 0, schema_uri_len = 0;
+    char *topic, *json_schema = NULL;
+    size_t topic_len = 0, schema_len = 0;
     char *msg = NULL;
     long resp_code = -1;
     pthread_t thr;
     php_xcom_req_t *req;
     char content_type_hdr[] = "Content-Type: avro/binary", auth_hdr[4096] = "", schema_ver_hdr[32] = "", schema_uri_hdr[1024] = "";
-    uint cur_key_len;
+    uint cur_key_len, msg_free = 0;
     ulong num_key;
     zend_hash_key_type cur_key;
     smart_str sheader = {0};
     HashTable *h_hdrs;
 
-    if (zend_parse_method_parameters(ZEND_NUM_ARGS() TSRMLS_CC, getThis(), "Osz|ssa", &obj, xcom_ce, &topic, &topic_len, &data_obj, &json_schema, &schema_len, &schema_uri, &schema_uri_len, &hdrs)==FAILURE) {
+    if (zend_parse_method_parameters(ZEND_NUM_ARGS() TSRMLS_CC, getThis(), "Osz|sa", &obj, xcom_ce, &topic, &topic_len, &data_obj, &json_schema, &schema_len, &hdrs)==FAILURE) {
         return NULL;
     }
 
@@ -393,6 +396,7 @@ static void* php_xcom_send_msg_common(INTERNAL_FUNCTION_PARAMETERS, int async) {
             RETVAL_FALSE;
             return NULL;
         }
+        msg_free = 1;
     } else {
         convert_to_string_ex(&data_obj);
         msg = Z_STRVAL_P(data_obj);
@@ -415,9 +419,6 @@ static void* php_xcom_send_msg_common(INTERNAL_FUNCTION_PARAMETERS, int async) {
         snprintf(auth_hdr, sizeof(auth_hdr), "Authorization: %s", xcom->cap_token);
     }
 
-    if(schema_uri_len) {
-        snprintf(schema_uri_hdr, sizeof(schema_uri_hdr), "X-XC-SCHEMA-URI: %s", schema_uri);
-    }
     snprintf(schema_ver_hdr, sizeof(schema_ver_hdr), "X-XC-SCHEMA-VERSION: %s", "1.0.0");
 
     req->curl_headers = curl_slist_append(req->curl_headers, "Expect:");
@@ -484,13 +485,11 @@ static void* php_xcom_send_msg_common(INTERNAL_FUNCTION_PARAMETERS, int async) {
       return NULL;
     }
 
-    snprintf(req->uri, sizeof(req->uri), "%s/%s", xcom->fabric_url, topic);
+    snprintf(req->uri, sizeof(req->uri), "%s%s", xcom->fabric_url, topic);
 
     debug = zend_read_property(xcom_ce, obj, "__debug", sizeof("__debug")-1, 0 TSRMLS_CC);
 
     req->debug = debug ? Z_BVAL_P(debug) : 0;
-
-    req->debug = 0;
 
     sslchecks = zend_read_property(xcom_ce, obj, "__sslchecks", sizeof("__sslchecks")-1, 0 TSRMLS_CC);
 
@@ -511,7 +510,7 @@ static void* php_xcom_send_msg_common(INTERNAL_FUNCTION_PARAMETERS, int async) {
 
     RETVAL_LONG(resp_code);
 
-    if(msg) {
+    if(msg_free) {
         efree(msg);
     }
 
@@ -558,15 +557,14 @@ static char* php_xcom_avro_record_from_obj(zval *obj, char *json_schema TSRMLS_D
         uint key_len;
         HashPosition pos;
         HashTable *tmp_ht = NULL;
+        avro_value_t field;
+        avro_wrapped_buffer_t wbuf;
 
         zend_hash_internal_pointer_reset_ex(myht, &pos);
         for (;; zend_hash_move_forward_ex(myht, &pos)) {
             i = zend_hash_get_current_key_ex(myht, &key, &key_len, &index, 0, &pos);
             if (i == HASH_KEY_NON_EXISTANT)
                 break;
-
-            avro_value_t field;
-            avro_wrapped_buffer_t wbuf;
 
             if (zend_hash_get_current_data_ex(myht, (void *)&data, &pos) == SUCCESS) {
                 tmp_ht = HASH_OF(*data);
@@ -632,7 +630,7 @@ XCOM_METHOD(__construct) /* {{{ */
 {
     php_xcom *xcom;
     zval *obj;
-    char *fab_url = NULL, *fab_token = NULL, *cap_token = NULL;
+    char *fab_url = NULL, *fab_token = NULL, *cap_token = NULL, *es = NULL;
     size_t fab_url_len = 0, fab_token_len = 0, cap_token_len = 0;
 
     if (zend_parse_method_parameters(ZEND_NUM_ARGS() TSRMLS_CC, getThis(), "O|sss", &obj, xcom_ce, &fab_url, &fab_url_len, &fab_token, &fab_token_len, &cap_token, &cap_token_len)==FAILURE) {
@@ -644,6 +642,11 @@ XCOM_METHOD(__construct) /* {{{ */
 
     if(fab_url_len) {
         xcom->fabric_url = estrndup(fab_url, fab_url_len);
+        es = xcom->fabric_url + fab_url_len - 1;
+        while(es > xcom->fabric_url && *es=='/') {
+                --es;
+        }
+        *(es+1) = '\0';
     }
 
     if(fab_token_len) {
@@ -655,7 +658,7 @@ XCOM_METHOD(__construct) /* {{{ */
     }
 
     zend_update_property_bool(xcom_ce, obj, "__debug", sizeof("__debug")-1, 0L TSRMLS_CC);
-    zend_update_property_bool(xcom_ce, obj, "__sslchecks", sizeof("__sslchecks")-1, XCOM_SSLCHECK_BOTH TSRMLS_CC);
+    zend_update_property_long(xcom_ce, obj, "__sslchecks", sizeof("__sslchecks")-1, XCOM_SSLCHECK_BOTH TSRMLS_CC);
 
     return;
 }

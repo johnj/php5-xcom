@@ -95,7 +95,7 @@ libavro
 ========
 In order to compile the xcommerce extension you will need libavro.
 
-The libavro build uses CMake (usually available in all package managers).
+The libavro build uses CMake (available in most package managers).
 
 <pre>
 $ git clone https://github.com/johnj/avro.git
