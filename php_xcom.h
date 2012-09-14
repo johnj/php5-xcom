@@ -69,7 +69,7 @@ curl_formfree(f);
 #endif
 #endif
 
-#define PHP_XCOM_VERSION "1.0.0"
+#define PHP_XCOM_VERSION "1.0.3"
 
 #ifdef ZEND_ENGINE_2_4
 # define XCOM_READ_PROPERTY(_obj, _mem, _type) zend_get_std_object_handlers()->read_property(_obj, _mem, _type, key TSRMLS_CC)
