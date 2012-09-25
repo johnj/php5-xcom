@@ -1,7 +1,7 @@
 php5-xcom
 =========
 
-X.Commerce message handling extension for PHP5
+X.commerce message handling extension for PHP5 (www.x.com)
 
 Installing/Configuring
 ======================
