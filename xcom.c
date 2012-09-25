@@ -536,6 +536,12 @@ static char* php_xcom_avro_record_from_obj(zval *obj, char *json_schema TSRMLS_D
     avro_schema_t schema = NULL;
     avro_schema_error_t error = NULL;
     avro_value_iface_t *iface;
+    zval **data;
+    avro_value_t field, branch;
+    avro_wrapped_buffer_t wbuf;
+    const char *f;
+    size_t record_size = 0;
+    int field_type, was_found = 0, branch_to_use;
 
     avro_schema_from_json(json_schema, strlen(json_schema), &schema, &error);
 
@@ -554,13 +560,6 @@ static char* php_xcom_avro_record_from_obj(zval *obj, char *json_schema TSRMLS_D
         php_error_docref(NULL TSRMLS_CC, E_WARNING, "recursion detected");
         return NULL;
     }
-
-    zval **data;
-    avro_value_t field, branch;
-    avro_wrapped_buffer_t wbuf;
-    const char *f;
-    size_t record_size = 0;
-    int field_type, was_found = 0, branch_to_use;
 
     avro_value_get_size(&val, &record_size);
 
