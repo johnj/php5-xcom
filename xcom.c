@@ -293,7 +293,7 @@ int php_xcom_obj_from_avro_msg(zval **obj, char *msg, char *json_schema TSRMLS_D
     double av_d;
     float av_f;
 
-    avro_reader_t reader = avro_reader_memory(msg, strlen(msg));
+    avro_reader_t reader = avro_reader_memory(msg, 100);
 
     avro_schema_from_json(json_schema, strlen(json_schema), &schema, &error);
 
@@ -309,15 +309,16 @@ int php_xcom_obj_from_avro_msg(zval **obj, char *msg, char *json_schema TSRMLS_D
 
     avro_generic_value_new(iface, &val);
 
-    avro_value_read(reader, &val);
-
     avro_value_get_size(&val, &sz);
 
+    avro_value_read(reader, &val);
+
     for(i=0; i<sz; ++i) {
-        avro_value_t field_val;
+        avro_value_t field_val, branch;
         char *field_name;
         avro_value_get_by_index(&val, i, &field_val, (const char **)&field_name);
 
+        php_avro_read_type:
         switch(avro_value_get_type(&field_val)) {
             case AVRO_STRING:
                 if(!avro_value_get_string(&field_val, (const char **)&av_s, &vsz)) {
@@ -351,6 +352,12 @@ int php_xcom_obj_from_avro_msg(zval **obj, char *msg, char *json_schema TSRMLS_D
                 if(!avro_value_get_double(&field_val, &av_d)) {
                     zend_update_property_double(zend_standard_class_def, *obj, field_name, strlen(field_name), av_d TSRMLS_CC);
                 }
+            break;
+            case AVRO_UNION:
+                avro_value_get_current_branch(&field_val, &branch);
+                avro_value_get_type(&branch);
+                field_val = branch;
+                goto php_avro_read_type;
             break;
             default:
             break;
@@ -420,6 +427,7 @@ static void* php_xcom_send_msg_common(INTERNAL_FUNCTION_PARAMETERS, int async) {
     }
 
     snprintf(schema_ver_hdr, sizeof(schema_ver_hdr), "X-XC-SCHEMA-VERSION: %s", "1.0.0");
+    /* FIX ME */
 
     req->curl_headers = curl_slist_append(req->curl_headers, "Expect:");
     req->curl_headers = curl_slist_append(req->curl_headers, auth_hdr);
@@ -520,7 +528,7 @@ static void* php_xcom_send_msg_common(INTERNAL_FUNCTION_PARAMETERS, int async) {
 static char* php_xcom_avro_record_from_obj(zval *obj, char *json_schema TSRMLS_DC) /* {{{ */
 {
     int i;
-    HashTable *myht;
+    HashTable *ht;
     char *msg_buf = NULL;
     avro_writer_t writer = NULL;
     avro_value_t val;
@@ -540,77 +548,108 @@ static char* php_xcom_avro_record_from_obj(zval *obj, char *json_schema TSRMLS_D
 
     avro_generic_value_new(iface, &val);
 
-    myht = Z_TYPE_P(obj)==IS_OBJECT ? Z_OBJPROP_P(obj) : HASH_OF(obj);
+    ht = Z_TYPE_P(obj)==IS_OBJECT ? Z_OBJPROP_P(obj) : HASH_OF(obj);
 
-    if (myht && myht->nApplyCount > 1) {
+    if (ht && ht->nApplyCount > 1) {
         php_error_docref(NULL TSRMLS_CC, E_WARNING, "recursion detected");
         return NULL;
     }
 
-    i = myht ? zend_hash_num_elements(myht) : 0;
+    zval **data;
+    avro_value_t field, branch;
+    avro_wrapped_buffer_t wbuf;
+    const char *f;
+    size_t record_size = 0;
+    int field_type, was_found = 0, branch_to_use;
 
-    if (i > 0)
-    {
-        char *key;
-        zval **data;
-        ulong index;
-        uint key_len;
-        HashPosition pos;
-        HashTable *tmp_ht = NULL;
-        avro_value_t field;
-        avro_wrapped_buffer_t wbuf;
+    avro_value_get_size(&val, &record_size);
 
-        zend_hash_internal_pointer_reset_ex(myht, &pos);
-        for (;; zend_hash_move_forward_ex(myht, &pos)) {
-            i = zend_hash_get_current_key_ex(myht, &key, &key_len, &index, 0, &pos);
-            if (i == HASH_KEY_NON_EXISTANT)
-                break;
+    for(i=0; i<record_size; ++i) {
+        branch_to_use = -1;
+        avro_value_get_by_index(&val, i, &field, &f);
 
-            if (zend_hash_get_current_data_ex(myht, (void *)&data, &pos) == SUCCESS) {
-                tmp_ht = HASH_OF(*data);
-                if (tmp_ht) {
-                    tmp_ht->nApplyCount++;
-                }
+        if(f==NULL) {
+            break;
+        }
 
-                avro_value_get_by_name(&val, key, &field, NULL);
+        field_type = avro_value_get_type(&field);
 
-                switch (Z_TYPE_PP(data))
-                {
-                    case IS_NULL:
-                        avro_value_set_null(&field);
-                        writer_bytes += 64;
-                        break;
-                    case IS_BOOL:
-                        avro_value_set_boolean(&field, Z_BVAL_PP(data));
-                        writer_bytes += 64;
-                        break;
-                    case IS_LONG:
-                        avro_value_set_long(&field, Z_LVAL_PP(data));
-                        writer_bytes += 64;
-                        break;
-                    case IS_DOUBLE:
-                        avro_value_set_double(&field, Z_DVAL_PP(data));
-                        writer_bytes += 64;
-                        break;
-                    case IS_STRING:
-                        avro_wrapped_buffer_new_string(&wbuf, Z_STRVAL_PP(data));
-                        avro_value_give_string_len(&field, &wbuf);
-                        writer_bytes += Z_STRLEN_PP(data);
-                        break;
-                    case IS_ARRAY:
-                    case IS_OBJECT:
-                        /* support complex types later */
-                        break;
-                    default:
-                        break;
-                }
-            }
+        was_found = zend_hash_find(ht, f, strlen(f) + 1, (void *)&data);
 
-            if (tmp_ht) {
-                tmp_ht->nApplyCount--;
+        if(SUCCESS!=was_found) {
+            if(AVRO_UNION!=field_type) {
+                php_error_docref(NULL TSRMLS_CC, E_WARNING, "missing data member: '%s' is in the schema but was not set!", f);
+                continue;
             }
         }
+
+        if(AVRO_UNION==field_type) {
+            if(was_found==SUCCESS) {
+                /* member was found, select the first branch
+                   (only two branches null-able unions are supported */
+                branch_to_use = 1;
+            } else {
+                /* member wasn't found, according to the avro spec the
+                   "default" value is the first branch, so let's set that */
+                branch_to_use = 0;
+            }
+            avro_value_set_branch(&field, branch_to_use, &branch);
+            field = branch;
+            field_type = avro_value_get_type(&branch);
+        }
+
+        switch(field_type) {
+            case AVRO_STRING:
+            case AVRO_BYTES:
+                convert_to_string_ex(data);
+                if(field_type==AVRO_BYTES) {
+                    avro_value_set_bytes(&field, Z_STRVAL_PP(data), Z_STRLEN_PP(data));
+                } else {
+                    avro_wrapped_buffer_new_string(&wbuf, Z_STRVAL_PP(data));
+                    avro_value_give_string_len(&field, &wbuf);
+                }
+                writer_bytes += Z_STRLEN_PP(data);
+                break;
+            case AVRO_INT32:
+                convert_to_long_ex(data);
+                avro_value_set_int(&field, Z_LVAL_PP(data));
+                writer_bytes += 64;
+                break;
+            case AVRO_INT64:
+                convert_to_long_ex(data);
+                avro_value_set_long(&field, Z_LVAL_PP(data));
+                writer_bytes += 64;
+                break;
+            case AVRO_FLOAT:
+                convert_to_double_ex(data);
+                avro_value_set_float(&field, Z_DVAL_PP(data));
+                writer_bytes += 64;
+                break;
+            case AVRO_DOUBLE:
+                convert_to_double_ex(data);
+                avro_value_set_double(&field, Z_DVAL_PP(data));
+                writer_bytes += 64;
+                break;
+            case AVRO_BOOLEAN:
+                convert_to_boolean_ex(data);
+                avro_value_set_boolean(&field, Z_BVAL_PP(data));
+                writer_bytes += 64;
+                break;
+            case AVRO_NULL:
+                avro_value_set_null(&field);
+                writer_bytes += 64;
+                break;
+        }
+
+        /* deal with a bug in libavro where the branch is not
+           finalized until the ref count on the writer is 0 or
+           branches are switched */
+        if(branch_to_use >= 0) {
+            avro_value_set_branch(&field, !branch_to_use, &branch);
+            avro_value_set_branch(&field, branch_to_use, &branch);
+        }
     }
+
     writer_bytes = writer_bytes * 2;
 
     msg_buf = emalloc(writer_bytes);
