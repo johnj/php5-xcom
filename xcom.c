@@ -293,7 +293,7 @@ int php_xcom_obj_from_avro_msg(zval **obj, char *msg, char *json_schema TSRMLS_D
     double av_d;
     float av_f;
 
-    avro_reader_t reader = avro_reader_memory(msg, 100);
+    avro_reader_t reader = avro_reader_memory(msg, strlen(msg));
 
     avro_schema_from_json(json_schema, strlen(json_schema), &schema, &error);
 
@@ -372,7 +372,7 @@ int php_xcom_obj_from_avro_msg(zval **obj, char *msg, char *json_schema TSRMLS_D
 
 static void* php_xcom_send_msg_common(INTERNAL_FUNCTION_PARAMETERS, int async) {
     php_xcom *xcom;
-    zval *obj, *data_obj, *debug, *hdrs = NULL, **cur_val, *sslchecks;
+    zval *obj, *data_obj, *debug, *hdrs = NULL, **cur_val, *sslchecks, *tmp;
     char *topic, *json_schema = NULL;
     size_t topic_len = 0, schema_len = 0;
     char *msg = NULL;
@@ -426,8 +426,9 @@ static void* php_xcom_send_msg_common(INTERNAL_FUNCTION_PARAMETERS, int async) {
         snprintf(auth_hdr, sizeof(auth_hdr), "Authorization: %s", xcom->cap_token);
     }
 
-    snprintf(schema_ver_hdr, sizeof(schema_ver_hdr), "X-XC-SCHEMA-VERSION: %s", "1.0.0");
-    /* FIX ME */
+    if(SUCCESS!=zend_hash_find(HASH_OF(hdrs), "X-XC-SCHEMA-VERSION", sizeof("X-XC-SCHEMA-VERSION"), (void *)&tmp)) {
+        snprintf(schema_ver_hdr, sizeof(schema_ver_hdr), "X-XC-SCHEMA-VERSION: %s", "1.0.0");
+    }
 
     req->curl_headers = curl_slist_append(req->curl_headers, "Expect:");
     req->curl_headers = curl_slist_append(req->curl_headers, auth_hdr);
@@ -655,6 +656,7 @@ static char* php_xcom_avro_record_from_obj(zval *obj, char *json_schema TSRMLS_D
     writer = avro_writer_memory(msg_buf, writer_bytes);
 
     avro_value_write(writer, &val);
+
     avro_value_iface_decref(iface);
     avro_schema_decref(schema);
     avro_writer_free(writer);
