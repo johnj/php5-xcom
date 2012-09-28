@@ -354,10 +354,13 @@ int php_xcom_obj_from_avro_msg(zval **obj, char *msg, char *json_schema TSRMLS_D
                 }
             break;
             case AVRO_UNION:
-                avro_value_get_current_branch(&field_val, &branch);
-                avro_value_get_type(&branch);
-                field_val = branch;
-                goto php_avro_read_type;
+                if(avro_value_get_current_branch(&field_val, &branch)) {
+                    zend_update_property_null(zend_standard_class_def, *obj, field_name, strlen(field_name) TSRMLS_CC);
+                } else {
+                    avro_value_get_type(&branch);
+                    field_val = branch;
+                    goto php_avro_read_type;
+                }
             break;
             default:
             break;
