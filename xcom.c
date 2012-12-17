@@ -429,7 +429,7 @@ static void* php_xcom_send_msg_common(INTERNAL_FUNCTION_PARAMETERS, int async) {
         snprintf(auth_hdr, sizeof(auth_hdr), "Authorization: %s", xcom->cap_token);
     }
 
-    if(SUCCESS!=zend_hash_find(HASH_OF(hdrs), "X-XC-SCHEMA-VERSION", sizeof("X-XC-SCHEMA-VERSION"), (void *)&tmp)) {
+    if(!hdrs || SUCCESS!=zend_hash_find(HASH_OF(hdrs), "X-XC-SCHEMA-VERSION", sizeof("X-XC-SCHEMA-VERSION"), (void *)&tmp)) {
         snprintf(schema_ver_hdr, sizeof(schema_ver_hdr), "X-XC-SCHEMA-VERSION: %s", "1.0.0");
     }
 
