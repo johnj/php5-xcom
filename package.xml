@@ -16,9 +16,9 @@ http://pear.php.net/dtd/package-2.0.xsd">
     <email>jawed@php.net</email>
     <active>yes</active>
   </lead>
-  <date>2012-09-27</date>
+  <date>2012-12-17</date>
   <version>
-    <release>1.0.4</release>
+    <release>1.0.5</release>
     <api>1.0.1</api>
   </version>
   <stability>
@@ -27,7 +27,7 @@ http://pear.php.net/dtd/package-2.0.xsd">
   </stability>
   <license uri="http://www.opensource.org/licenses/bsd-license.php">BSD</license>
   <notes>
-   - [new] support NULL-able unions
+   - [bug] handle non-array HTTP headers params
   </notes>
   <contents>
     <dir name="/">
@@ -53,6 +53,21 @@ http://pear.php.net/dtd/package-2.0.xsd">
   </extsrcrelease>
 
   <changelog>
+  <release>
+   <date>2012-09-27</date>
+   <version>
+     <release>1.0.4</release>
+     <api>1.0.1</api>
+   </version>
+   <stability>
+     <release>stable</release>
+     <api>stable</api>
+    </stability>
+    <license uri="http://www.opensource.org/licenses/bsd-license.php">BSD</license>
+    <notes>
+     - [new] support NULL-able unions
+    </notes>
+   </release>
    <release>
     <date>2012-09-13</date>
     <version>
