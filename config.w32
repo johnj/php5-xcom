@@ -8,7 +8,7 @@ if (PHP_XCOM != "no") {
 			CHECK_HEADER_ADD_INCLUDE("curl/easy.h", "CFLAGS_XCOM") &&
 			CHECK_LIB("avro.lib", "xcom", PHP_XCOM) &&
                         CHECK_HEADER_ADD_INCLUDE("avro/value.h", "CFLAGS_XCOM") &&
-			CHECK_LIB("libpthread.lib", "xcom", PHP_XCOM) &&
+			CHECK_LIB("libpthread.lib;pthreadVC2.lib", "xcom", PHP_XCOM) &&
                         CHECK_HEADER_ADD_INCLUDE("pthread.h", "CFLAGS_XCOM") &&
 			CHECK_LIB("ssleay32.lib", "XCOM", PHP_XCOM) &&
 			CHECK_LIB("libeay32.lib", "xcom", PHP_XCOM) 
@@ -20,7 +20,10 @@ if (PHP_XCOM != "no") {
 		EXTENSION("xcom", "xcom.c", true);
 		ADD_FLAG("CFLAGS_XCOM", "/D CURL_STATICLIB");
 		ADD_FLAG("CFLAGS_XCOM", "/D XCOM_USE_CURL");
+		ADD_FLAG("CFLAGS_XCOM", "/D _TIMESPEC_DEFINED");
 		ADD_FLAG("LDFLAGS_XCOM", "/D /FORCE:MULTIPLE ");
+
+		ADD_EXTENSION_DEP("xcom", "json");
 	} else {
 		WARNING("xcom not enabled; libraries and headers not found");
 	}
